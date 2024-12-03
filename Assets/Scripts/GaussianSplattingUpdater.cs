@@ -2,21 +2,19 @@ using UnityEngine;
 
 public class GaussianSplatUpdaterWithFaces : MonoBehaviour
 {
-    [SerializeField] public SMPLX smplx; // SMPL-X model reference
-    public Material gaussianMaterial;   // Gaussian splatting material
-    public ComputeShader gaussianComputeShader; // Compute shader for Gaussian updates
+    [SerializeField] public SMPLX smplx;             // SMPL-X model reference
+    public Material gaussianMaterial;               // Gaussian splatting material
+    public ComputeShader gaussianComputeShader;     // Compute shader for Gaussian updates
 
-    private GraphicsBuffer vertexBuffer;       // SMPL-X vertex GPU buffer
-    private GraphicsBuffer faceBuffer;         // SMPL-X face index GPU buffer
-    private GraphicsBuffer gaussianPositionBuffer; // Gaussian positions GPU buffer
-    private GraphicsBuffer gaussianRotationBuffer; // Gaussian rotations GPU buffer
-    private GraphicsBuffer gaussianScaleBuffer;    // Gaussian scales GPU buffer
+    private GraphicsBuffer vertexBuffer;            // SMPL-X vertex GPU buffer
+    private GraphicsBuffer faceBuffer;              // SMPL-X face index GPU buffer
+    private GraphicsBuffer gaussianPositionBuffer;  // Gaussian positions GPU buffer
+    private GraphicsBuffer gaussianRotationBuffer;  // Gaussian rotations GPU buffer
+    private GraphicsBuffer gaussianScaleBuffer;     // Gaussian scales GPU buffer
 
-    private int numVertices; // Number of vertices in SMPL-X
-    private int numFaces;    // Number of faces in SMPL-X
-    private int numGaussians; // Number of Gaussians (mapped to faces)
-
-    private int[] gaussianToFaceMapping; // Mapping from Gaussians to faces
+    private int numVertices;    // Number of vertices in SMPL-X
+    private int numFaces;       // Number of faces in SMPL-X
+    private int numGaussians;   // Number of Gaussians (mapped to faces)
 
     void Start()
     {
@@ -31,6 +29,12 @@ public class GaussianSplatUpdaterWithFaces : MonoBehaviour
 
     void InitializeBuffers()
     {
+        if (smplx == null)
+        {
+            Debug.LogError("SMPLX object is not assigned in GaussianSplatUpdaterWithFaces!");
+            return;
+        }
+
         // Get the SkinnedMeshRenderer from the SMPL-X model
         SkinnedMeshRenderer smr = smplx.GetComponentInChildren<SkinnedMeshRenderer>();
         if (smr == null)
@@ -40,10 +44,20 @@ public class GaussianSplatUpdaterWithFaces : MonoBehaviour
         }
 
         Mesh mesh = smr.sharedMesh;
-        numVertices = mesh.vertexCount;
-        numFaces = mesh.triangles.Length / 3;
-        numGaussians = numFaces; // Assuming one Gaussian per face
+        if (mesh == null)
+        {
+            Debug.LogError("SMPL-X mesh is not assigned or invalid!");
+            return;
+        }
 
+        numVertices = mesh.vertexCount;
+        if (numVertices == 0)
+        {
+            Debug.LogError("SMPL-X mesh has no vertices!");
+            
+            return;
+        }
+        Debug.Log(numVertices);
         // Initialize SMPL-X Vertex GPU Buffer
         vertexBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, numVertices, sizeof(float) * 3);
 
@@ -66,7 +80,6 @@ public class GaussianSplatUpdaterWithFaces : MonoBehaviour
 
     void UpdateGaussianData()
     {
-        // Ensure compute shader is properly set
         if (gaussianComputeShader == null) return;
 
         int kernel = gaussianComputeShader.FindKernel("UpdateGaussians");
@@ -78,7 +91,7 @@ public class GaussianSplatUpdaterWithFaces : MonoBehaviour
         gaussianComputeShader.SetBuffer(kernel, "GaussianRotations", gaussianRotationBuffer);
         gaussianComputeShader.SetBuffer(kernel, "GaussianScales", gaussianScaleBuffer);
 
-        // Set other parameters (e.g., Gaussian-to-face mapping)
+        // Set constants
         gaussianComputeShader.SetInt("_NumFaces", numFaces);
 
         // Dispatch compute shader
@@ -90,11 +103,17 @@ public class GaussianSplatUpdaterWithFaces : MonoBehaviour
 
     void UpdateVertexBuffer()
     {
+        if (smplx == null)
+        {
+            Debug.LogError("SMPLX object is not assigned in GaussianSplatUpdaterWithFaces!");
+            return;
+        }
+
         // Get the SkinnedMeshRenderer from the SMPL-X model
         SkinnedMeshRenderer smr = smplx.GetComponentInChildren<SkinnedMeshRenderer>();
         if (smr == null)
         {
-            Debug.LogError("SkinnedMeshRenderer not found!");
+            Debug.LogError("SkinnedMeshRenderer not found in the SMPL-X GameObject or its children!");
             return;
         }
 
@@ -103,6 +122,12 @@ public class GaussianSplatUpdaterWithFaces : MonoBehaviour
         smr.BakeMesh(bakedMesh);
 
         // Upload the vertex positions to the GPU buffer
+        if (vertexBuffer == null)
+        {
+            Debug.LogError("Vertex buffer is not initialized!");
+            return;
+        }
+
         Vector3[] vertices = bakedMesh.vertices;
         vertexBuffer.SetData(vertices);
         Debug.Log("Uploaded SMPL-X vertex positions to GPU.");
@@ -110,14 +135,12 @@ public class GaussianSplatUpdaterWithFaces : MonoBehaviour
 
     void Update()
     {
-        // Update SMPL-X vertices and Gaussian data each frame
         UpdateVertexBuffer();
         UpdateGaussianData();
     }
 
     void OnDestroy()
     {
-        // Clean up GPU resources
         vertexBuffer?.Dispose();
         faceBuffer?.Dispose();
         gaussianPositionBuffer?.Dispose();
