@@ -1,13 +1,10 @@
 using System;
-using System.Data;
 using System.IO;
 using Newtonsoft.Json;
 using UnityEngine;
-using UnityEngine.UIElements;
 
 public class HahaImporter : MonoBehaviour
 {
-
     public string path = "Assets/HahaData/state_dict.json";
 
     public HahaAvatarData data;
@@ -15,10 +12,11 @@ public class HahaImporter : MonoBehaviour
     [Serializable]
     public class HahaAvatarData
     {
-
         public float[] betas;
         public Vertex[] vertices;
         public Texture2D texture;
+        public int[] gaussianToFace; // Mapping from Gaussian to face
+        public int[] faces;         // Face indices (flattened)
 
         public HahaAvatarData(string path)
         {
@@ -26,7 +24,8 @@ public class HahaImporter : MonoBehaviour
 
             HahaOutputData data = JsonConvert.DeserializeObject<HahaOutputData>(content);
             betas = getBetas(data._betas);
-            // texture = ConvertToTexture(data._trainable_texture);
+            gaussianToFace = getGaussianToFace(data._gaussian_to_face);
+            faces = getFaces(data._faces);
             vertices = getVertices(data._xyz);
         }
 
@@ -34,18 +33,41 @@ public class HahaImporter : MonoBehaviour
         {
             int rows = 10;
             float[] betas = new float[rows];
-            for(int i = 0; i < rows; i++)
-            {   
+            for (int i = 0; i < rows; i++)
+            {
                 betas[i] = _betas[0][i];
             }
             return betas;
+        }
+
+        public int[] getGaussianToFace(float[] _gaussian_to_face)
+        {
+            int[] result = new int[_gaussian_to_face.Length];
+            for (int i = 0; i < _gaussian_to_face.Length; i++)
+            {
+                result[i] = Mathf.FloorToInt(_gaussian_to_face[i]); // Convert float to int
+            }
+            return result;
+        }
+
+        public int[] getFaces(float[][] _faces)
+        {
+            int rows = _faces.Length;
+            int[] flattenedFaces = new int[rows * 3];
+            for (int i = 0; i < rows; i++)
+            {
+                flattenedFaces[i * 3 + 0] = Mathf.FloorToInt(_faces[i][0]);
+                flattenedFaces[i * 3 + 1] = Mathf.FloorToInt(_faces[i][1]);
+                flattenedFaces[i * 3 + 2] = Mathf.FloorToInt(_faces[i][2]);
+            }
+            return flattenedFaces;
         }
 
         public Vertex[] getVertices(float[][] _xyz)
         {
             int rows = _xyz.GetLength(0);
             Vertex[] verts = new Vertex[rows];
-            for(int i = 0; i < rows; i++)
+            for (int i = 0; i < rows; i++)
             {
                 verts[i] = new Vertex
                 {
@@ -55,43 +77,6 @@ public class HahaImporter : MonoBehaviour
                 };
             }
             return verts;
-        }
-
-        public Texture2D ConvertToTexture(float[][][] data)
-        {
-            // Get dimensions
-            int height = data.Length;        // First dimension: height
-            int width = data[0].Length;     // Second dimension: width
-            int channels = data[0][0].Length; // Third dimension: RGB channels (should be 3)
-
-            if (channels != 3)
-            {
-                Debug.LogError("Data must have exactly 3 channels (RGB) per pixel.");
-                return null;
-            }
-
-            // Create a new texture
-            Texture2D texture = new(width, height, TextureFormat.RGB24, false);
-
-            // Set each pixel
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    // Get RGB values from the array
-                    float r = Mathf.Clamp01(data[y][x][0]); // Red
-                    float g = Mathf.Clamp01(data[y][x][1]); // Green
-                    float b = Mathf.Clamp01(data[y][x][2]); // Blue
-
-                    // Set the pixel color
-                    texture.SetPixel(x, y, new Color(r, g, b));
-                }
-            }
-
-            // Apply changes to the texture
-            texture.Apply();
-
-            return texture;
         }
 
         [Serializable]
@@ -116,10 +101,17 @@ public class HahaImporter : MonoBehaviour
         }
     }
 
-    // Start is called before the first frame update
+    // GPU Buffers
+    private GraphicsBuffer gaussianToFaceBuffer;
+    private GraphicsBuffer faceBuffer;
+
     void Start()
     {
+        // Load data from the file
         data = new HahaAvatarData(path);
+
+        // Initialize GPU buffers
+        InitializeBuffers();
 
         // Find the PoseController in the scene and pass the betas
         PoseController poseController = FindObjectOfType<PoseController>();
@@ -133,9 +125,34 @@ public class HahaImporter : MonoBehaviour
         }
     }
 
-    // Update is called once per frame
-    void Update()
+    void InitializeBuffers()
     {
-        
+        // Initialize Gaussian-to-Face Buffer
+        gaussianToFaceBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, data.gaussianToFace.Length, sizeof(int));
+        gaussianToFaceBuffer.SetData(data.gaussianToFace);
+        Debug.Log("Initialized Gaussian-to-Face Buffer.");
+
+        // Initialize Face Buffer
+        faceBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, data.faces.Length, sizeof(int));
+        faceBuffer.SetData(data.faces);
+        Debug.Log("Initialized Face Buffer.");
+    }
+
+    public GraphicsBuffer GetGaussianToFaceBuffer()
+    {
+        return gaussianToFaceBuffer;
+    }
+
+    public GraphicsBuffer GetFaceBuffer()
+    {
+        return faceBuffer;
+    }
+
+    void OnDestroy()
+    {
+        // Release GPU buffers
+        gaussianToFaceBuffer?.Dispose();
+        faceBuffer?.Dispose();
+        Debug.Log("Disposed GPU Buffers.");
     }
 }

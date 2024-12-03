@@ -1,0 +1,107 @@
+#pragma kernel UpdateGaussians
+
+// Buffers
+StructuredBuffer<int> GaussianToFaceBuffer; // Maps Gaussians to faces
+StructuredBuffer<int> FaceBuffer;          // Contains face indices
+StructuredBuffer<float3> VertexBuffer;     // Vertex positions
+RWStructuredBuffer<float4> GaussianBuffer; // Output Gaussian data (position, scale, etc.)
+
+// Constants
+#define MAX_SCALE 0.05
+
+[numthreads(64, 1, 1)]
+void UpdateGaussians(uint3 id : SV_DispatchThreadID)
+{
+    uint idx = id.x;
+
+    // Ensure we don't exceed the buffer size
+    if (idx >= GaussianToFaceBuffer.Length)
+        return;
+
+    // Get the face index for the current Gaussian
+    int faceIdx = GaussianToFaceBuffer[idx];
+
+    // Retrieve the vertex indices for this face
+    int v0Idx = FaceBuffer[faceIdx * 3 + 0];
+    int v1Idx = FaceBuffer[faceIdx * 3 + 1];
+    int v2Idx = FaceBuffer[faceIdx * 3 + 2];
+
+    // Fetch the vertex positions
+    float3 v0 = VertexBuffer[v0Idx];
+    float3 v1 = VertexBuffer[v1Idx];
+    float3 v2 = VertexBuffer[v2Idx];
+
+    // Calculate the face centroid (translation)
+    float3 T = (v0 + v1 + v2) / 3.0;
+
+    // Calculate edge vectors
+    float3 vec1 = normalize(v2 - v1);
+    float3 vec2 = normalize(v0 - v1);
+    float3 vec3 = normalize(v0 - v2);
+
+    // Calculate the normal
+    float3 normal = normalize(cross(vec1, vec2));
+
+    // Build a rotation matrix
+    float3x3 rotMat;
+    rotMat[0] = vec1;
+    rotMat[1] = normal;
+    rotMat[2] = cross(vec1, normal);
+
+    // Convert rotation matrix to quaternion
+    float4 R = RotationMatrixToQuaternion(rotMat);
+
+    // Calculate scale factor
+    float area = length(cross(v2 - v1, v0 - v1)) / 2.0; // Triangle area
+    float vec3Length = length(v0 - v2);
+    float h = area / vec3Length;
+    float k = max(h, vec3Length) / MAX_SCALE;
+
+    // Write the Gaussian data
+    GaussianBuffer[idx * 4 + 0] = float4(T, 0.0);      // Position
+    GaussianBuffer[idx * 4 + 1] = R;                  // Rotation
+    GaussianBuffer[idx * 4 + 2] = float4(k, k, k, 0); // Scale
+    GaussianBuffer[idx * 4 + 3] = float4(1.0, 1.0, 1.0, 1.0); // Color/Opacity (example)
+}
+
+// Helper function to convert rotation matrix to quaternion
+float4 RotationMatrixToQuaternion(float3x3 m)
+{
+    float trace = m[0][0] + m[1][1] + m[2][2];
+    float4 q;
+
+    if (trace > 0.0)
+    {
+        float s = sqrt(trace + 1.0) * 2.0;
+        q.w = 0.25 * s;
+        q.x = (m[2][1] - m[1][2]) / s;
+        q.y = (m[0][2] - m[2][0]) / s;
+        q.z = (m[1][0] - m[0][1]) / s;
+    }
+    else if ((m[0][0] > m[1][1]) && (m[0][0] > m[2][2]))
+    {
+        float s = sqrt(1.0 + m[0][0] - m[1][1] - m[2][2]) * 2.0;
+        q.w = (m[2][1] - m[1][2]) / s;
+        q.x = 0.25 * s;
+        q.y = (m[0][1] + m[1][0]) / s;
+        q.z = (m[0][2] + m[2][0]) / s;
+    }
+    else if (m[1][1] > m[2][2])
+    {
+        float s = sqrt(1.0 + m[1][1] - m[0][0] - m[2][2]) * 2.0;
+        q.w = (m[0][2] - m[2][0]) / s;
+        q.x = (m[0][1] + m[1][0]) / s;
+        q.y = 0.25 * s;
+        q.z = (m[1][2] + m[2][1]) / s;
+    }
+    else
+    {
+        float s = sqrt(1.0 + m[2][2] - m[0][0] - m[1][1]) * 2.0;
+        q.w = (m[1][0] - m[0][1]) / s;
+        q.x = (m[0][2] + m[2][0]) / s;
+        q.y = (m[1][2] + m[2][1]) / s;
+        q.z = 0.25 * s;
+    }
+
+    return q;
+}
