@@ -2,63 +2,71 @@ using UnityEngine;
 
 public class PoseController : MonoBehaviour
 {
-    [SerializeField] public SMPLX smplx; 
+    [SerializeField] public SMPLX smplx; // Reference to the SMPL-X model
     public float poseSwitchTime = 3f;   // Time in seconds to switch poses
     public Material smplxMaterial;     // Assign the material with your custom shader
 
     private GraphicsBuffer vertexBuffer; // GPU buffer to store vertex positions
     private Transform[] joints;         // Array to store SMPL-X joint transforms
     private bool isTPose = true;        // Toggle between poses
+    private SkinnedMeshRenderer smr;    // Reference to SkinnedMeshRenderer
 
     void Start()
     {
+        // Validate the SMPL-X reference
         if (smplx == null)
         {
             Debug.LogError("SMPLX object not assigned!");
             return;
         }
 
+        // Validate the shader material reference
         if (smplxMaterial == null)
         {
             Debug.LogError("Material not assigned!");
             return;
         }
 
-        // Initialize the joints array from SMPLX hierarchy
+        // Get the SkinnedMeshRenderer component
+        smr = smplx.GetComponentInChildren<SkinnedMeshRenderer>();
+        if (smr == null)
+        {
+            Debug.LogError("SkinnedMeshRenderer not found on SMPLX object!");
+            return;
+        }
+
+        // Initialize the joints array from the SMPL-X hierarchy
         InitializeJoints();
 
-        // Initialize the GPU buffer
+        // Initialize the GPU vertex buffer
         InitializeVertexBuffer();
 
-        // Start the animation loop
+        // Start the pose animation loop
         StartCoroutine(AnimatePose());
     }
 
     void InitializeJoints()
     {
-        // Get all child transforms of the SMPLX model
+        // Get all child transforms of the SMPL-X model
         joints = smplx.GetComponentsInChildren<Transform>();
-        Debug.Log($"Found {joints.Length} joints in SMPLX hierarchy.");
+        Debug.Log($"Found {joints.Length} joints in SMPL-X hierarchy.");
     }
 
     void InitializeVertexBuffer()
     {
-        // Get the SkinnedMeshRenderer from the SMPLX model
-        SkinnedMeshRenderer smr = smplx.GetComponentInChildren<SkinnedMeshRenderer>();
-        if (smr == null)
+        // Create the GPU buffer for vertices
+        Mesh mesh = smr.sharedMesh;
+        if (mesh == null)
         {
-            Debug.LogError("SkinnedMeshRenderer not found!");
+            Debug.LogError("Shared mesh not found in SkinnedMeshRenderer!");
             return;
         }
 
-        Mesh mesh = smr.sharedMesh;
-
-        // Create the GPU buffer for vertices
         vertexBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, mesh.vertexCount, sizeof(float) * 3);
 
         // Assign the buffer to the material
         smplxMaterial.SetBuffer("_VertexBuffer", vertexBuffer);
-        Debug.Log("Initialized GPU buffer for vertex positions.");
+        Debug.Log("Initialized GPU buffer for vertex positions and assigned it to the material.");
     }
 
     System.Collections.IEnumerator AnimatePose()
@@ -74,7 +82,7 @@ public class PoseController : MonoBehaviour
                 ApplyTPose(); // Apply predefined T-pose
             }
 
-            // Bake the updated mesh and upload the new vertex data to the GPU
+            // Update the GPU vertex buffer with the baked mesh data
             UpdateVertexBuffer();
 
             isTPose = !isTPose; // Toggle pose state
@@ -88,7 +96,6 @@ public class PoseController : MonoBehaviour
         {
             joint.localRotation = Quaternion.identity; // Reset to default (T-pose)
         }
-
         Debug.Log("Applied T-pose to SMPL-X.");
     }
 
@@ -111,7 +118,6 @@ public class PoseController : MonoBehaviour
 
             joints[i].localEulerAngles = rotation; // Apply rotation
         }
-
         Debug.Log("Applied custom pose to SMPL-X.");
     }
 
@@ -119,22 +125,8 @@ public class PoseController : MonoBehaviour
     {
         float[] randomPose = new float[joints.Length * 3];
 
-        // Ensure the root joint faces the camera
-        Transform rootJoint = joints[0]; // Assuming the root joint is the first one
-        Vector3 cameraPosition = Camera.main.transform.position;
-        Vector3 directionToCamera = (cameraPosition - rootJoint.position).normalized;
-
-        // Calculate the rotation to face the camera
-        Quaternion lookRotation = Quaternion.LookRotation(directionToCamera, Vector3.up);
-        Vector3 rootEulerAngles = lookRotation.eulerAngles;
-
-        // Apply the rotation to the root joint
-        randomPose[0] = rootEulerAngles.x;
-        randomPose[1] = rootEulerAngles.y;
-        randomPose[2] = rootEulerAngles.z;
-
-        // Generate random rotations for other joints
-        for (int i = 1; i < joints.Length; i++)
+        // Generate random rotations for all joints
+        for (int i = 0; i < joints.Length; i++)
         {
             randomPose[i * 3 + 0] = Random.Range(-30f, 30f); // X rotation
             randomPose[i * 3 + 1] = Random.Range(-30f, 30f); // Y rotation
@@ -147,11 +139,9 @@ public class PoseController : MonoBehaviour
 
     void UpdateVertexBuffer()
     {
-        // Get the SkinnedMeshRenderer from the SMPL-X model
-        SkinnedMeshRenderer smr = smplx.GetComponentInChildren<SkinnedMeshRenderer>();
         if (smr == null)
         {
-            Debug.LogError("SkinnedMeshRenderer not found!");
+            Debug.LogError("SkinnedMeshRenderer not initialized!");
             return;
         }
 
@@ -162,17 +152,39 @@ public class PoseController : MonoBehaviour
         // Get the updated vertex positions
         Vector3[] vertices = bakedMesh.vertices;
 
+        // Print the first vertex
+        if (vertices.Length > 0)
+        {
+            Debug.Log($"First vertex after update: {vertices[0]}");
+        }
+        else
+        {
+            Debug.LogError("No vertices found in the baked mesh!");
+        }
+
         // Upload the vertex positions to the GPU buffer
-        vertexBuffer.SetData(vertices);
-        Debug.Log("Uploaded new vertex positions to GPU.");
+        if (vertexBuffer != null)
+        {
+            vertexBuffer.SetData(vertices);
+            Debug.Log("Uploaded new vertex positions to GPU.");
+        }
+        else
+        {
+            Debug.LogError("Vertex buffer is not initialized!");
+        }
     }
 
     void OnDestroy()
     {
         // Clean up GPU resources
-        vertexBuffer?.Dispose();
-        Debug.Log("Disposed GPU buffer.");
+        if (vertexBuffer != null)
+        {
+            vertexBuffer.Dispose();
+            vertexBuffer = null;
+        }
+        Debug.Log("Disposed GPU vertex buffer.");
     }
+
     public void UpdateBetas(float[] newBetas)
     {
         if (newBetas.Length != SMPLX.NUM_BETAS)

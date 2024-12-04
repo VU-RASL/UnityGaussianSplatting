@@ -3,6 +3,7 @@ using UnityEngine;
 public class GaussianSplatUpdaterWithFaces : MonoBehaviour
 {
     [SerializeField] public SMPLX smplx;             // SMPL-X model reference
+    [SerializeField] public GameObject gaussianSplatsObject;
     public Material gaussianMaterial;               // Gaussian splatting material
     public ComputeShader gaussianComputeShader;     // Compute shader for Gaussian updates
 
