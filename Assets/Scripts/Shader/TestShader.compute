@@ -1,0 +1,30 @@
+// TestShader.compute
+#pragma kernel CSMain
+
+// Buffers
+StructuredBuffer<int> GaussianToFaceBuffer; // Gaussian-to-face mapping
+StructuredBuffer<float3> HahaXyzBuffer;     // Positions (XYZ)
+StructuredBuffer<float3> VertexBuffer;     // Vertex positions
+StructuredBuffer<int3> FaceBuffer;         // Faces (Nx3 indices)
+
+// Entry point
+[numthreads(64, 1, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    // Check thread bounds
+    if (id.x >= GaussianToFaceBuffer.Length || id.x >= HahaXyzBuffer.Length || id.x >= FaceBuffer.Length)
+        return;
+
+    // Example usage: Access data from the buffers
+    int gaussianIndex = GaussianToFaceBuffer[id.x];
+    float3 position = HahaXyzBuffer[gaussianIndex];
+
+    // Access face data
+    int3 face = FaceBuffer[id.x % FaceBuffer.Length];
+    float3 vertex1 = VertexBuffer[face.x];
+    float3 vertex2 = VertexBuffer[face.y];
+    float3 vertex3 = VertexBuffer[face.z];
+
+
+
+}

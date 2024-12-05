@@ -149,20 +149,26 @@ public class HahaImporter : MonoBehaviour
 
     void InitializeBuffers()
     {
-        // Initialize Gaussian-to-Face Buffer
-        gaussianToFaceBuffer = new ComputeBuffer(data.gaussianToFace.Length, sizeof(int));
-        gaussianToFaceBuffer.SetData(data.gaussianToFace);
-        Debug.Log("Initialized Gaussian-to-Face ComputeBuffer.");
+        if (data.gaussianToFace != null && data.gaussianToFace.Length > 0)
+        {
+            gaussianToFaceBuffer = new ComputeBuffer(data.gaussianToFace.Length, sizeof(int));
+            gaussianToFaceBuffer.SetData(data.gaussianToFace);
+            Debug.Log("Initialized GaussianToFaceBuffer.");
+        }
 
-        // Initialize Haha_XYZ Buffer
-        haha_xyzBuffer = new ComputeBuffer(data.positions.Length, sizeof(float) * 3);
-        haha_xyzBuffer.SetData(data.positions);
-        Debug.Log("Initialized Haha_XYZ ComputeBuffer.");
+        if (data.positions != null && data.positions.Length > 0)
+        {
+            haha_xyzBuffer = new ComputeBuffer(data.positions.Length, sizeof(float) * 3);
+            haha_xyzBuffer.SetData(data.positions);
+            Debug.Log("Initialized HahaXyzBuffer.");
+        }
 
-        // Initialize Face Buffer (Nx3 vector of integers)
-        faceBuffer = new ComputeBuffer(data.facesToVerts.Length, UnsafeUtility.SizeOf<HahaAvatarData.Face>());
-        faceBuffer.SetData(data.facesToVerts);
-        Debug.Log("Initialized Face ComputeBuffer.");
+        if (data.facesToVerts != null && data.facesToVerts.Length > 0)
+        {
+            faceBuffer = new ComputeBuffer(data.facesToVerts.Length, sizeof(int) * 3);
+            faceBuffer.SetData(data.facesToVerts);
+            Debug.Log("Initialized FaceBuffer.");
+        }
     }
 
     public ComputeBuffer GetHahaXyzBuffer()
@@ -183,9 +189,9 @@ public class HahaImporter : MonoBehaviour
     void OnDestroy()
     {
         // Release GPU buffers
-        gaussianToFaceBuffer?.Dispose();
-        haha_xyzBuffer?.Dispose();
-        faceBuffer?.Dispose();
-        Debug.Log("Disposed GPU Buffers.");
+        // gaussianToFaceBuffer?.Dispose();
+        // haha_xyzBuffer?.Dispose();
+        // faceBuffer?.Dispose();
+        // Debug.Log("Haha Importer Disposed GPU Buffers.");
     }
 }
