@@ -6,7 +6,7 @@ public class PoseController : MonoBehaviour
     public float poseSwitchTime = 3f;   // Time in seconds to switch poses
     public Material smplxMaterial;     // Assign the material with your custom shader
 
-    private GraphicsBuffer vertexBuffer; // GPU buffer to store vertex positions
+    public ComputeBuffer vertexBuffer; // GPU buffer to store vertex positions
     private Transform[] joints;         // Array to store SMPL-X joint transforms
     private bool isTPose = true;        // Toggle between poses
     private SkinnedMeshRenderer smr;    // Reference to SkinnedMeshRenderer
@@ -62,7 +62,7 @@ public class PoseController : MonoBehaviour
             return;
         }
 
-        vertexBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, mesh.vertexCount, sizeof(float) * 3);
+        vertexBuffer = new ComputeBuffer(mesh.vertexCount, sizeof(float) * 3);
 
         // Assign the buffer to the material
         smplxMaterial.SetBuffer("_VertexBuffer", vertexBuffer);
@@ -202,5 +202,9 @@ public class PoseController : MonoBehaviour
         // Apply the updated betas to the mesh
         smplx.SetBetaShapes();
         Debug.Log("Updated and applied new betas to SMPLX mesh.");
+    }
+    public ComputeBuffer GetVertexBuffer()
+    {
+        return vertexBuffer;
     }
 }

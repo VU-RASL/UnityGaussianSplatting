@@ -2,6 +2,8 @@ using System;
 using System.IO;
 using Newtonsoft.Json;
 using UnityEngine;
+using System.Runtime.InteropServices;
+using Unity.Collections.LowLevel.Unsafe;
 
 public class HahaImporter : MonoBehaviour
 {
@@ -17,7 +19,7 @@ public class HahaImporter : MonoBehaviour
         public Vector3[] positions; // xyz of gaussians
         public Texture2D texture;
         public int[] gaussianToFace; // Mapping from Gaussian to face
-        public Face[] facesToVerts;         // Face indices
+        public Face[] facesToVerts; // Face indices (N x 3 array)
 
         public HahaAvatarData(string path, string texSavePath)
         {
@@ -30,7 +32,7 @@ public class HahaImporter : MonoBehaviour
             positions = getVertices(data._xyz);
             texture = ConvertToTexture(data._trainable_texture);
             File.WriteAllBytes(texSavePath, texture.EncodeToPNG());
-            Debug.Log("Texture save to: " + texSavePath);
+            Debug.Log("Texture saved to: " + texSavePath);
         }
 
         public float[] getBetas(float[][] _betas)
@@ -46,12 +48,7 @@ public class HahaImporter : MonoBehaviour
 
         public int[] getGaussianToFace(int[] _gaussian_to_face)
         {
-            int[] result = new int[_gaussian_to_face.Length];
-            for (int i = 0; i < _gaussian_to_face.Length; i++)
-            {
-                result[i] = _gaussian_to_face[i]; // Convert float to int
-            }
-            return result;
+            return (int[])_gaussian_to_face.Clone();
         }
 
         public Face[] getFaces(int[][] _faces)
@@ -60,27 +57,18 @@ public class HahaImporter : MonoBehaviour
             Face[] faces = new Face[rows];
             for (int i = 0; i < rows; i++)
             {
-                faces[i] = new Face {
-                    v1 = _faces[i][0],
-                    v2 = _faces[i][1],
-                    v3 = _faces[i][2]
-                };
+                faces[i] = new Face(_faces[i][0], _faces[i][1], _faces[i][2]);
             }
             return faces;
         }
 
         public Vector3[] getVertices(float[][] _xyz)
         {
-            int rows = _xyz.GetLength(0);
+            int rows = _xyz.Length;
             Vector3[] verts = new Vector3[rows];
             for (int i = 0; i < rows; i++)
             {
-                verts[i] = new Vector3
-                (
-                    _xyz[i][0],
-                    _xyz[i][1],
-                    _xyz[i][2]
-                );
+                verts[i] = new Vector3(_xyz[i][0], _xyz[i][1], _xyz[i][2]);
             }
             return verts;
         }
@@ -96,7 +84,6 @@ public class HahaImporter : MonoBehaviour
                 Debug.LogError("Data must have exactly 3 channels (RGB) per pixel.");
                 return null;
             }
-            Debug.Log("Size: " + size.ToString());
 
             // Create a new texture
             Texture2D texture = new Texture2D(size, size, TextureFormat.RGB24, false);
@@ -112,63 +99,28 @@ public class HahaImporter : MonoBehaviour
                     float b = Mathf.Clamp01(data[2][x][y]); // Blue
 
                     // Set the pixel color
-                    texture.SetPixel(y, x, new Color(r, g, b)); // y,x to rotate
+                    texture.SetPixel(y, x, new Color(r, g, b)); // Note: y,x to rotate
                 }
             }
 
             // Apply changes to the texture
             texture.Apply();
-
             return texture;
         }
 
-        // public Texture2D ConvertToTexture(float[][][] data)
-        // {
-        //     int originalHeight = data.Length;  // Original height of the 512x512 texture
-        //     int originalWidth = data[0].Length; // Original width of the 512x512 texture
-
-        //     // Create a Texture2D with the original 512x512 data
-        //     Texture2D smallTexture = new Texture2D(originalWidth, originalHeight, TextureFormat.RGBA32, false);
-
-        //     for (int y = 0; y < originalHeight; y++)
-        //     {
-        //         for (int x = 0; x < originalWidth; x++)
-        //         {
-        //             float r = Mathf.Clamp01(data[y][x][0]); // Red channel
-        //             float g = Mathf.Clamp01(data[y][x][1]); // Green channel
-        //             float b = Mathf.Clamp01(data[y][x][2]); // Blue channel
-        //             float a = 1.0f; // Alpha (optional)
-
-        //             smallTexture.SetPixel(x, y, new Color(r, g, b, a));
-        //         }
-        //     }
-
-        //     smallTexture.Apply();
-
-        //     // Resize the 512x512 texture to 4096x4096
-        //     Texture2D resizedTexture = new Texture2D(4096, 4096, TextureFormat.RGBA32, false);
-        //     Graphics.CopyTexture(smallTexture, 0, 0, 0, 0, smallTexture.width, smallTexture.height, resizedTexture, 0, 0, 0, 0);
-
-        //     // Optionally reorganize UV layout here if necessary (e.g., custom remapping logic)
-
-        //     resizedTexture.Apply();
-        //     return resizedTexture;
-        // }
-
         [Serializable]
-        public class Vertex
+        public struct Face
         {
-            public float x;
-            public float y;
-            public float z;
-        }
+            public int v1; // First vertex index
+            public int v2; // Second vertex index
+            public int v3; // Third vertex index
 
-        [Serializable]
-        public class Face
-        {
-            public int v1;
-            public int v2;
-            public int v3;
+            public Face(int vertex1, int vertex2, int vertex3)
+            {
+                v1 = vertex1;
+                v2 = vertex2;
+                v3 = vertex3;
+            }
         }
 
         public class HahaOutputData
@@ -176,18 +128,15 @@ public class HahaImporter : MonoBehaviour
             public float[][] _betas;
             public float[][][] _trainable_texture;
             public float[][] _xyz;
-            public float[][] _color;
-            public float[][] _rotation;
-            public float[][] _scaling;
-            public float[][] _opacity;
             public int[] _gaussian_to_face;
             public int[][] _faces;
         }
     }
 
     // GPU Buffers
-    private GraphicsBuffer gaussianToFaceBuffer;
-    private GraphicsBuffer faceBuffer;
+    public ComputeBuffer gaussianToFaceBuffer;
+    public ComputeBuffer haha_xyzBuffer;
+    public ComputeBuffer faceBuffer;
 
     void Start()
     {
@@ -195,62 +144,38 @@ public class HahaImporter : MonoBehaviour
         data = new HahaAvatarData(path, texSavePath);
 
         // Initialize GPU buffers
-        // InitializeBuffers();
-
-        // Set SMPL-X texture
-        // SetSMPLXTexture(data.texture);
-
-        // // Find the PoseController in the scene and pass the betas
-        // PoseController poseController = FindObjectOfType<PoseController>();
-        // if (poseController != null)
-        // {
-        //     poseController.UpdateBetas(data.betas);
-        // }
-        // else
-        // {
-        //     Debug.LogError("PoseController not found in the scene!");
-        // }
+        InitializeBuffers();
     }
 
     void InitializeBuffers()
     {
         // Initialize Gaussian-to-Face Buffer
-        gaussianToFaceBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, data.gaussianToFace.Length, sizeof(int));
+        gaussianToFaceBuffer = new ComputeBuffer(data.gaussianToFace.Length, sizeof(int));
         gaussianToFaceBuffer.SetData(data.gaussianToFace);
-        Debug.Log("Initialized Gaussian-to-Face Buffer.");
+        Debug.Log("Initialized Gaussian-to-Face ComputeBuffer.");
 
-        // Initialize Face Buffer
-        faceBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, data.facesToVerts.Length, sizeof(int));
+        // Initialize Haha_XYZ Buffer
+        haha_xyzBuffer = new ComputeBuffer(data.positions.Length, sizeof(float) * 3);
+        haha_xyzBuffer.SetData(data.positions);
+        Debug.Log("Initialized Haha_XYZ ComputeBuffer.");
+
+        // Initialize Face Buffer (Nx3 vector of integers)
+        faceBuffer = new ComputeBuffer(data.facesToVerts.Length, UnsafeUtility.SizeOf<HahaAvatarData.Face>());
         faceBuffer.SetData(data.facesToVerts);
-        Debug.Log("Initialized Face Buffer.");
+        Debug.Log("Initialized Face ComputeBuffer.");
     }
 
-    // void SetSMPLXTexture(Texture2D texture)
-    // {
-    //     SkinnedMeshRenderer smr = FindObjectOfType<SkinnedMeshRenderer>();
-    //     if (smr == null)
-    //     {
-    //         Debug.LogError("SkinnedMeshRenderer not found in the scene!");
-    //         return;
-    //     }
+    public ComputeBuffer GetHahaXyzBuffer()
+    {
+        return haha_xyzBuffer;
+    }
 
-    //     if (smr.material != null)
-    //     {
-    //         smr.material.mainTexture = texture;
-    //         Debug.Log("SMPL-X texture has been set successfully.");
-    //     }
-    //     else
-    //     {
-    //         Debug.LogError("Material not assigned to SkinnedMeshRenderer!");
-    //     }
-    // }
-
-    public GraphicsBuffer GetGaussianToFaceBuffer()
+    public ComputeBuffer GetGaussianToFaceBuffer()
     {
         return gaussianToFaceBuffer;
     }
 
-    public GraphicsBuffer GetFaceBuffer()
+    public ComputeBuffer GetFaceBuffer()
     {
         return faceBuffer;
     }
@@ -259,6 +184,7 @@ public class HahaImporter : MonoBehaviour
     {
         // Release GPU buffers
         gaussianToFaceBuffer?.Dispose();
+        haha_xyzBuffer?.Dispose();
         faceBuffer?.Dispose();
         Debug.Log("Disposed GPU Buffers.");
     }

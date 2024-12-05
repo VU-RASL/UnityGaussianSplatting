@@ -1,59 +1,42 @@
 using UnityEngine;
 
-public class VertexBufferHandler : MonoBehaviour
+public class Test_shader_with_buffer : MonoBehaviour
 {
-    public SkinnedMeshRenderer skinnedMeshRenderer; // Reference to SkinnedMeshRenderer
-    public Material material; // Material using your custom shader
 
-    private ComputeBuffer vertexBuffer; // GPU buffer for storing vertex positions
-    private Vector3[] vertexPositions; // CPU-side array for debugging
-    private int vertexCount;
+
+    // GPU Buffers
+    private ComputeBuffer gaussianToFaceBuffer;
+    private ComputeBuffer haha_xyzBuffer;
+    private ComputeBuffer vertexBuffer;
+    private ComputeBuffer faceBuffer;
+    private HahaImporter hahaImporter;
+    private PoseController poseController;
 
     void Start()
-    {
-        // Get the mesh from the SkinnedMeshRenderer
-        Mesh sharedMesh = skinnedMeshRenderer.sharedMesh;
+    {   
+        hahaImporter = FindObjectOfType<HahaImporter>();
+        poseController = FindObjectOfType<PoseController>();
 
-        if (sharedMesh == null)
-        {
-            Debug.LogError("No mesh assigned to SkinnedMeshRenderer!");
-            return;
-        }
-
-        // Get the vertex count
-        vertexCount = sharedMesh.vertexCount;
-
-        // Initialize the ComputeBuffer
-        vertexBuffer = new ComputeBuffer(vertexCount, sizeof(float) * 3);
-        vertexPositions = new Vector3[vertexCount]; // CPU-side array to read back data (optional)
-
-        // Bind the ComputeBuffer to the shader
-        material.SetBuffer("_VertexOutput", vertexBuffer);
-
-        Debug.Log($"Buffer created for {vertexCount} vertices.");
+        gaussianToFaceBuffer = hahaImporter.GetGaussianToFaceBuffer();
+        haha_xyzBuffer = hahaImporter.GetHahaXyzBuffer();
+        faceBuffer = hahaImporter.GetFaceBuffer();
+        vertexBuffer = poseController.GetVertexBuffer();
+        
     }
 
-    void Update()
+
+
+    void OnRenderObject()
     {
-        // Render the object (ensure it's using the correct material)
-        // Graphics.DrawMesh(skinnedMeshRenderer.sharedMesh, transform.localToWorldMatrix, material, 0);
-
-        // Retrieve data from the buffer for debugging (optional)
-        vertexBuffer.GetData(vertexPositions);
-
-        // Example: Debug the first vertex position
-        if (vertexPositions.Length > 0)
-        {
-            Debug.Log($"First vertex position: {vertexPositions[100]}");
-        }
+ 
     }
+
 
     void OnDestroy()
     {
-        // Release the buffer to avoid memory leaks
-        if (vertexBuffer != null)
-        {
-            vertexBuffer.Release();
-        }
+        // Release GPU buffers
+        gaussianToFaceBuffer?.Release();
+        vertexBuffer?.Release();
+        Debug.Log("Released ComputeBuffers.");
     }
 }
