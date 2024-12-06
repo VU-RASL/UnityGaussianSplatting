@@ -11,6 +11,9 @@ public class Test_shader_with_buffer : MonoBehaviour
     private ComputeBuffer haha_xyzBuffer;
     private ComputeBuffer vertexBuffer;
     private ComputeBuffer faceBuffer;
+    private ComputeBuffer TBuffer;
+    private ComputeBuffer RBuffer;
+    private ComputeBuffer kBuffer;
 
     private int kernelHandle;
     private bool isInitialized = false;
@@ -50,6 +53,14 @@ public class Test_shader_with_buffer : MonoBehaviour
         }
 
         Debug.Log("All buffers initialized successfully!");
+
+        // Create output buffers
+        int faceCount = faceBuffer.count;
+
+        TBuffer = new ComputeBuffer(faceCount, sizeof(float) * 3); // float3
+        RBuffer = new ComputeBuffer(faceCount, sizeof(float) * 4); // float4
+        kBuffer = new ComputeBuffer(faceCount, sizeof(float));    // float
+
         isInitialized = true;
 
         // Initialize compute shader
@@ -60,13 +71,22 @@ public class Test_shader_with_buffer : MonoBehaviour
     {
         if (!isInitialized) return;
 
-        kernelHandle = testShader.FindKernel("CSMain");
+        kernelHandle = testShader.FindKernel("CalcFacesTransform");
+
+        if (kernelHandle < 0)
+        {
+            Debug.LogError("Kernel 'CalcFacesTransform' not found!");
+            return;
+        }
 
         // Set buffers in compute shader
         testShader.SetBuffer(kernelHandle, "GaussianToFaceBuffer", gaussianToFaceBuffer);
         testShader.SetBuffer(kernelHandle, "HahaXyzBuffer", haha_xyzBuffer);
         testShader.SetBuffer(kernelHandle, "FaceBuffer", faceBuffer);
         testShader.SetBuffer(kernelHandle, "VertexBuffer", vertexBuffer);
+        testShader.SetBuffer(kernelHandle, "TBuffer", TBuffer);
+        testShader.SetBuffer(kernelHandle, "RBuffer", RBuffer);
+        testShader.SetBuffer(kernelHandle, "kBuffer", kBuffer);
 
         ExecuteShader();
     }
@@ -75,8 +95,9 @@ public class Test_shader_with_buffer : MonoBehaviour
     {
         if (!isInitialized) return;
 
-        int threadGroups = Mathf.CeilToInt(gaussianToFaceBuffer.count / 64.0f);
+        int threadGroups = Mathf.CeilToInt(faceBuffer.count / 64.0f);
         testShader.Dispatch(kernelHandle, threadGroups, 1, 1);
+
         Debug.Log("Compute shader executed.");
     }
 
@@ -86,6 +107,9 @@ public class Test_shader_with_buffer : MonoBehaviour
         haha_xyzBuffer?.Release();
         faceBuffer?.Release();
         vertexBuffer?.Release();
+        TBuffer?.Release();
+        RBuffer?.Release();
+        kBuffer?.Release();
         Debug.Log("Released ComputeBuffers.");
     }
 }

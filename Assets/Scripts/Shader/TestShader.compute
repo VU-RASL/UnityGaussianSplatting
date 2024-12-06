@@ -1,30 +1,106 @@
-// TestShader.compute
-#pragma kernel CSMain
+#pragma kernel CalcFacesTransform
 
 // Buffers
-StructuredBuffer<int> GaussianToFaceBuffer; // Gaussian-to-face mapping
-StructuredBuffer<float3> HahaXyzBuffer;     // Positions (XYZ)
-StructuredBuffer<float3> VertexBuffer;     // Vertex positions
-StructuredBuffer<int3> FaceBuffer;         // Faces (Nx3 indices)
+StructuredBuffer<float3> VertexBuffer; // Vertex positions
+StructuredBuffer<int3> FaceBuffer;     // Faces (indices of vertices)
+RWStructuredBuffer<float3> TBuffer;   // Translations (output)
+RWStructuredBuffer<float4> RBuffer;   // Rotations as quaternions (output)
+RWStructuredBuffer<float> kBuffer;   // Scaling factors (output)
 
-// Entry point
-[numthreads(64, 1, 1)]
-void CSMain(uint3 id : SV_DispatchThreadID)
+// Constants
+#define MAX_SCALE 0.05
+
+// Helper function: Normalize a vector
+float3 normalize_vector(float3 v, float eps)
 {
-    // Check thread bounds
-    if (id.x >= GaussianToFaceBuffer.Length || id.x >= HahaXyzBuffer.Length || id.x >= FaceBuffer.Length)
+    float len = length(v); // Use length() as a function
+    return len > eps ? v / len : float3(0.0, 0.0, 0.0);
+}
+
+// Helper function: Matrix to Quaternion conversion
+float4 matrix_to_quaternion(float3x3 m)
+{
+    float trace = m[0][0] + m[1][1] + m[2][2];
+    float4 q;
+
+    if (trace > 0.0)
+    {
+        float s = sqrt(trace + 1.0) * 2.0;
+        q.w = 0.25 * s;
+        q.x = (m[2][1] - m[1][2]) / s;
+        q.y = (m[0][2] - m[2][0]) / s;
+        q.z = (m[1][0] - m[0][1]) / s;
+    }
+    else if ((m[0][0] > m[1][1]) && (m[0][0] > m[2][2]))
+    {
+        float s = sqrt(1.0 + m[0][0] - m[1][1] - m[2][2]) * 2.0;
+        q.w = (m[2][1] - m[1][2]) / s;
+        q.x = 0.25 * s;
+        q.y = (m[0][1] + m[1][0]) / s;
+        q.z = (m[0][2] + m[2][0]) / s;
+    }
+    else if (m[1][1] > m[2][2])
+    {
+        float s = sqrt(1.0 + m[1][1] - m[0][0] - m[2][2]) * 2.0;
+        q.w = (m[0][2] - m[2][0]) / s;
+        q.x = (m[0][1] + m[1][0]) / s;
+        q.y = 0.25 * s;
+        q.z = (m[1][2] + m[2][1]) / s;
+    }
+    else
+    {
+        float s = sqrt(1.0 + m[2][2] - m[0][0] - m[1][1]) * 2.0;
+        q.w = (m[1][0] - m[0][1]) / s;
+        q.x = (m[0][2] + m[2][0]) / s;
+        q.y = (m[1][2] + m[2][1]) / s;
+        q.z = 0.25 * s;
+    }
+
+    return normalize(q);
+}
+
+// Main kernel
+[numthreads(64, 1, 1)]
+void CalcFacesTransform(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= FaceBuffer.Length)
         return;
 
-    // Example usage: Access data from the buffers
-    int gaussianIndex = GaussianToFaceBuffer[id.x];
-    float3 position = HahaXyzBuffer[gaussianIndex];
+    // Load face vertex indices
+    int3 face = FaceBuffer[id.x];
 
-    // Access face data
-    int3 face = FaceBuffer[id.x % FaceBuffer.Length];
-    float3 vertex1 = VertexBuffer[face.x];
-    float3 vertex2 = VertexBuffer[face.y];
-    float3 vertex3 = VertexBuffer[face.z];
+    // Get face vertices
+    float3 v0 = VertexBuffer[face.x];
+    float3 v1 = VertexBuffer[face.y];
+    float3 v2 = VertexBuffer[face.z];
 
+    // Calculate translation (T): Mean of vertices
+    float3 T = (v0 + v1 + v2) / 3.0f;
+    TBuffer[id.x] = T;
 
+    // Calculate vectors for face edges
+    float3 vec1 = v1 - v0;
+    float3 vec2 = v2 - v0;
 
+    // Calculate normal and orthonormal basis
+    float3 normal = normalize_vector(cross(vec1, vec2), 1e-6);
+    vec1 = normalize_vector(vec1, 1e-6);
+    float3 prod = cross(vec1, normal);
+    prod = normalize_vector(prod, 1e-6);
+
+    // Build rotation matrix
+    float3x3 rotmat = float3x3(vec1, normal, prod);
+    rotmat = transpose(rotmat);
+
+    // Convert rotation matrix to quaternion (R)
+    float4 R = matrix_to_quaternion(rotmat);
+    RBuffer[id.x] = R;
+
+    // Calculate area and edge lengths for scaling factor (k)
+    float area = length(cross(vec1, vec2)); // Use length() as a function
+    float vec3_length = length(v2 - v1);   // Use length() as a function
+    float h = area / vec3_length;
+
+    float k = (h + vec3_length) / 2.0 / MAX_SCALE; // Replace mean() with manual mean calculation
+    kBuffer[id.x] = k;
 }
