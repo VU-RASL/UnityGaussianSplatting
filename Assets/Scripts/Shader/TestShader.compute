@@ -1,11 +1,20 @@
 #pragma kernel CalcFacesTransform
+#pragma kernel MapGaussiansToFaces
 
 // Buffers
-StructuredBuffer<float3> VertexBuffer; // Vertex positions
-StructuredBuffer<int3> FaceBuffer;     // Faces (indices of vertices)
-RWStructuredBuffer<float3> TBuffer;   // Translations (output)
-RWStructuredBuffer<float4> RBuffer;   // Rotations as quaternions (output)
-RWStructuredBuffer<float> kBuffer;   // Scaling factors (output)
+StructuredBuffer<float3> VertexBuffer;       // Vertex positions
+StructuredBuffer<int3> FaceBuffer;          // Faces (indices of vertices)
+StructuredBuffer<int> GaussianToFaceBuffer; // Mapping from Gaussian to face indices
+StructuredBuffer<float3> HahaXyzBuffer;     // Original Gaussian positions
+RWStructuredBuffer<float3> TBuffer;         // Translations (output)
+RWStructuredBuffer<float4> RBuffer;         // Rotations as quaternions (output)
+RWStructuredBuffer<float> kBuffer;          // Scaling factors (output)
+
+// Output buffers mapped by Gaussians
+RWStructuredBuffer<float3> GaussianTBuffer; // Translations for Gaussians
+RWStructuredBuffer<float4> GaussianRBuffer; // Rotations for Gaussians
+RWStructuredBuffer<float> GaussianKBuffer;  // Scaling factors for Gaussians
+RWStructuredBuffer<float3> UpdatedXyzBuffer; // Updated Gaussian positions
 
 // Constants
 #define MAX_SCALE 0.05
@@ -59,7 +68,18 @@ float4 matrix_to_quaternion(float3x3 m)
     return normalize(q);
 }
 
-// Main kernel
+// Apply a quaternion to a vector
+float3 quaternion_apply(float4 q, float3 v)
+{
+    float3 u = float3(q.x, q.y, q.z);
+    float s = q.w;
+
+    return 2.0 * dot(u, v) * u
+           + (s * s - dot(u, u)) * v
+           + 2.0 * s * cross(u, v);
+}
+
+// Kernel: Compute translations, rotations, and scaling factors for faces
 [numthreads(64, 1, 1)]
 void CalcFacesTransform(uint3 id : SV_DispatchThreadID)
 {
@@ -103,4 +123,33 @@ void CalcFacesTransform(uint3 id : SV_DispatchThreadID)
 
     float k = (h + vec3_length) / 2.0 / MAX_SCALE; // Replace mean() with manual mean calculation
     kBuffer[id.x] = k;
+}
+
+// Kernel: Map Gaussian attributes and update positions
+[numthreads(64, 1, 1)]
+void MapGaussiansToFaces(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= GaussianToFaceBuffer.Length)
+        return;
+
+    // Get the face index corresponding to this Gaussian
+    int faceIndex = GaussianToFaceBuffer[id.x];
+
+    // Map T, R, k for this Gaussian
+    float3 T = TBuffer[faceIndex];
+    float4 R = RBuffer[faceIndex];
+    float k = kBuffer[faceIndex];
+
+    GaussianTBuffer[id.x] = T;
+    GaussianRBuffer[id.x] = R;
+    GaussianKBuffer[id.x] = k;
+
+    // Retrieve the original Gaussian position
+    float3 originalXyz = HahaXyzBuffer[id.x];
+
+    // Compute the new position
+    float3 updatedXyz = T + quaternion_apply(R, originalXyz) * k;
+
+    // Store the updated position
+    UpdatedXyzBuffer[id.x] = updatedXyz;
 }

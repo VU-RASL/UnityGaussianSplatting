@@ -127,7 +127,15 @@ namespace GaussianSplatting.Runtime
                 };
                 if (displayMat == null)
                     continue;
-
+                        // Use updated buffer if available
+                if (gs.updatedPositionsBuffer != null)
+                {
+                    mpb.SetBuffer("_SplatPos", gs.updatedPositionsBuffer);
+                }
+                else
+                {
+                    mpb.SetBuffer("_SplatPos", gs.m_GpuPosData);
+                }
                 gs.SetAssetDataOnMaterial(mpb);
                 mpb.SetBuffer(GaussianSplatRenderer.Props.SplatChunks, gs.m_GpuChunks);
 
@@ -204,6 +212,16 @@ namespace GaussianSplatting.Runtime
     [ExecuteInEditMode]
     public class GaussianSplatRenderer : MonoBehaviour
     {
+        //  Updated Code for renderring
+        public GraphicsBuffer updatedPositionsBuffer;
+        public void SetUpdatedPositionsBuffer(GraphicsBuffer buffer)
+        {
+            updatedPositionsBuffer = buffer;
+        }
+
+ 
+        //  END Updated Code for renderring
+
         public enum RenderMode
         {
             Splats,
@@ -241,7 +259,7 @@ namespace GaussianSplatting.Runtime
         int m_SplatCount; // initially same as asset splat count, but editing can change this
         GraphicsBuffer m_GpuSortDistances;
         internal GraphicsBuffer m_GpuSortKeys;
-        GraphicsBuffer m_GpuPosData;
+        public GraphicsBuffer m_GpuPosData;
         GraphicsBuffer m_GpuOtherData;
         GraphicsBuffer m_GpuSHData;
         Texture m_GpuColorData;
@@ -476,6 +494,15 @@ namespace GaussianSplatting.Runtime
 
         internal void SetAssetDataOnMaterial(MaterialPropertyBlock mat)
         {
+            if (updatedPositionsBuffer != null)
+            {
+                mat.SetBuffer("_SplatPos", updatedPositionsBuffer);
+                Debug.Log("GaussianSplatRenderer testetttttttttttttttttttttttttttt.");
+            }
+            else
+            {
+                mat.SetBuffer("_SplatPos", m_GpuPosData);
+            }
             mat.SetBuffer(Props.SplatPos, m_GpuPosData);
             mat.SetBuffer(Props.SplatOther, m_GpuOtherData);
             mat.SetBuffer(Props.SplatSH, m_GpuSHData);
