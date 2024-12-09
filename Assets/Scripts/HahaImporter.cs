@@ -17,6 +17,8 @@ public class HahaImporter : MonoBehaviour
     {
         public float[] betas;
         public Vector3[] positions; // xyz of gaussians
+        public Vector3[] scaling; // scales of gaussians
+
         public Texture2D texture;
         public int[] gaussianToFace; // Mapping from Gaussian to face
         public Face[] facesToVerts; // Face indices (N x 3 array)
@@ -30,6 +32,7 @@ public class HahaImporter : MonoBehaviour
             gaussianToFace = getGaussianToFace(data._gaussian_to_face);
             facesToVerts = getFaces(data._faces);
             positions = getVertices(data._xyz);
+            scaling = getVertices(data._scaling);
             texture = ConvertToTexture(data._trainable_texture);
             File.WriteAllBytes(texSavePath, texture.EncodeToPNG());
             Debug.Log("Texture saved to: " + texSavePath);
@@ -128,6 +131,7 @@ public class HahaImporter : MonoBehaviour
             public float[][] _betas;
             public float[][][] _trainable_texture;
             public float[][] _xyz;
+            public float[][] _scaling;
             public int[] _gaussian_to_face;
             public int[][] _faces;
         }
@@ -136,6 +140,7 @@ public class HahaImporter : MonoBehaviour
     // GPU Buffers
     public ComputeBuffer gaussianToFaceBuffer;
     public ComputeBuffer haha_xyzBuffer;
+    public ComputeBuffer haha_scalingBuffer;
     public ComputeBuffer faceBuffer;
 
     void Start()
@@ -169,6 +174,10 @@ public class HahaImporter : MonoBehaviour
             faceBuffer.SetData(data.facesToVerts);
             Debug.Log("Initialized FaceBuffer.");
         }
+
+        //  scaling
+        haha_scalingBuffer = new ComputeBuffer(data.positions.Length, sizeof(float) * 3);
+        haha_scalingBuffer.SetData(data.scaling);
     }
 
     public ComputeBuffer GetHahaXyzBuffer()
@@ -185,13 +194,18 @@ public class HahaImporter : MonoBehaviour
     {
         return faceBuffer;
     }
+    public ComputeBuffer GetHahaScalingBuffer()
+    {
+        return haha_scalingBuffer;
+    }
 
     void OnDestroy()
     {
         // Release GPU buffers
-        // gaussianToFaceBuffer?.Dispose();
-        // haha_xyzBuffer?.Dispose();
-        // faceBuffer?.Dispose();
-        // Debug.Log("Haha Importer Disposed GPU Buffers.");
+        gaussianToFaceBuffer?.Dispose();
+        haha_scalingBuffer?.Dispose();
+        haha_xyzBuffer?.Dispose();
+        faceBuffer?.Dispose();
+        Debug.Log("Haha Importer Disposed GPU Buffers.");
     }
 }

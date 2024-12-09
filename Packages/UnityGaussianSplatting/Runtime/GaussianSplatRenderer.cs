@@ -260,9 +260,9 @@ namespace GaussianSplatting.Runtime
         GraphicsBuffer m_GpuSortDistances;
         internal GraphicsBuffer m_GpuSortKeys;
         public GraphicsBuffer m_GpuPosData;
-        GraphicsBuffer m_GpuOtherData;
-        GraphicsBuffer m_GpuSHData;
-        Texture m_GpuColorData;
+        public GraphicsBuffer m_GpuOtherData;
+        public GraphicsBuffer m_GpuSHData;
+        public Texture m_GpuColorData;
         internal GraphicsBuffer m_GpuChunks;
         internal bool m_GpuChunksValid;
         internal GraphicsBuffer m_GpuView;

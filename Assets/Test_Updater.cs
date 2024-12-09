@@ -10,6 +10,7 @@ public class Test_shader_with_buffer : MonoBehaviour
     // GPU Buffers
     private ComputeBuffer gaussianToFaceBuffer;
     private ComputeBuffer haha_xyzBuffer;
+    private ComputeBuffer haha_scalingBuffer;
     private ComputeBuffer vertexBuffer;
     private ComputeBuffer faceBuffer;
     private ComputeBuffer TBuffer;
@@ -21,7 +22,7 @@ public class Test_shader_with_buffer : MonoBehaviour
     private ComputeBuffer GaussianRBuffer;
     private ComputeBuffer GaussianKBuffer;
     private ComputeBuffer UpdatedXyzBuffer;
-
+    private ComputeBuffer UpdatedScalingBuffer;
     private int calcFacesKernelHandle;
     private int mapGaussiansKernelHandle;
     private bool isInitialized = false;
@@ -58,6 +59,7 @@ public class Test_shader_with_buffer : MonoBehaviour
         // Get buffers from HahaImporter and PoseController
         gaussianToFaceBuffer = hahaImporter.GetGaussianToFaceBuffer();
         haha_xyzBuffer = hahaImporter.GetHahaXyzBuffer();
+        haha_scalingBuffer = hahaImporter.GetHahaScalingBuffer();
         faceBuffer = hahaImporter.GetFaceBuffer();
         vertexBuffer = poseController.GetVertexBuffer();
 
@@ -83,7 +85,7 @@ public class Test_shader_with_buffer : MonoBehaviour
         GaussianRBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 4); // float4
         GaussianKBuffer = new ComputeBuffer(gaussianCount, sizeof(float));    // float
         UpdatedXyzBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 3); // float3
-
+        UpdatedScalingBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 3); // float3
         isInitialized = true;
 
         // Initialize compute shader
@@ -125,7 +127,8 @@ public class Test_shader_with_buffer : MonoBehaviour
         testShader.SetBuffer(mapGaussiansKernelHandle, "GaussianKBuffer", GaussianKBuffer);
         testShader.SetBuffer(mapGaussiansKernelHandle, "HahaXyzBuffer", haha_xyzBuffer);
         testShader.SetBuffer(mapGaussiansKernelHandle, "UpdatedXyzBuffer", UpdatedXyzBuffer);
-
+        testShader.SetBuffer(mapGaussiansKernelHandle, "HahaScalingBuffer", haha_scalingBuffer);
+        testShader.SetBuffer(mapGaussiansKernelHandle, "UpdatedScalingBuffer", UpdatedScalingBuffer);
         ExecuteShader();
     }
     void Update()
@@ -173,37 +176,13 @@ public class Test_shader_with_buffer : MonoBehaviour
                 flattenedData[i * 3 + 2] = updatedPositions[i].z;
             }
 
-            // Zero-pad if flattenedData is smaller than m_GpuPosData
-            if (numFloats < gpuPosDataSize)
-            {
-                Debug.LogWarning($"Zero-padding flattened data. Current size: {numFloats}, Required size: {gpuPosDataSize} ( {numFloats/3} vs {gpuPosDataSize/3},splats)");
-                float[] paddedData = new float[gpuPosDataSize];
-                System.Array.Copy(flattenedData, paddedData, numFloats);
-                flattenedData = paddedData;
-            }
-            // else if (numFloats > gpuPosDataSize)
-            // {
-            //     Debug.LogError($"Flattened data size exceeds m_GpuPosData. Flattened size: {numFloats}, GPU buffer size: {gpuPosDataSize}");
-            //     return;
-            // }
-            else if (numFloats > gpuPosDataSize)
-            {
-                // Truncate if data is larger
-                Debug.LogWarning($"Zero-padding flattened data. Current size: {numFloats}, Required size: {gpuPosDataSize} ( {numFloats/3} vs {gpuPosDataSize/3},splats)");
-                float[] truncatedData = new float[gpuPosDataSize];
-                System.Array.Copy(flattenedData, truncatedData, gpuPosDataSize);
-                flattenedData = truncatedData;
-            }
 
             // Set the flattened (and potentially zero-padded) data to the GPU buffer
             gaussianRenderer.m_GpuPosData.SetData(flattenedData);
 
             Debug.Log("Updated m_GpuPosData in GaussianSplatRenderer.");
         }
-        else
-        {
-            Debug.LogWarning("GaussianRenderer or UpdatedXyzBuffer is null. Ensure everything is set up correctly.");
-        }
+
     }
 
     void OnDestroy()
@@ -220,7 +199,7 @@ public class Test_shader_with_buffer : MonoBehaviour
         GaussianRBuffer?.Release();
         GaussianKBuffer?.Release();
         UpdatedXyzBuffer?.Release();
-
+        UpdatedScalingBuffer?.Release();
         Debug.Log("Released ComputeBuffers.");
     }
 
