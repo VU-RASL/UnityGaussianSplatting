@@ -19,9 +19,9 @@ RWStructuredBuffer<float> kBuffer;          // Scaling factors (output)
 // Combined Gaussian-specific buffer
 struct GaussianData
 {
-    float3 translation; // T
-    float4 rotation;    // R
-    float scaling;      // k
+
+    float4 rotation;    
+    float3 scaling;      
 };
 RWStructuredBuffer<GaussianData> GaussianDataBuffer; // Combined buffer
 
@@ -49,7 +49,7 @@ float3 quaternion_apply(float4 q, float3 v)
 }
 
 // Scaling activation function
-float s_act(float x)
+float3 s_act(float3 x)
 {
     return MIN_S_VALUE + saturate(1.0 / (1.0 + exp(-x))) * (MAX_S_VALUE - MIN_S_VALUE);
 }
@@ -123,8 +123,8 @@ void MapGaussiansToFaces(uint3 id : SV_DispatchThreadID)
         R.w * originalRotation.w - R.x * originalRotation.x - R.y * originalRotation.y - R.z * originalRotation.z
     ));
 
-    float scaling = HahaScalingBuffer[id.x];
-    float adjustedScaling = s_act(scaling) * k;
+    float3 scaling = HahaScalingBuffer[id.x];
+    float3 adjustedScaling = s_act(scaling) * k;
 
     // Compute updated position
     float3 originalXyz = HahaXyzBuffer[id.x];
@@ -132,7 +132,6 @@ void MapGaussiansToFaces(uint3 id : SV_DispatchThreadID)
 
     // Write to combined buffer
     GaussianData data;
-    data.translation = T;
     data.rotation = rigidRotation;
     data.scaling = adjustedScaling;
     GaussianDataBuffer[id.x] = data;

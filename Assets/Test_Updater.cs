@@ -1,5 +1,9 @@
 using UnityEngine;
 using GaussianSplatting.Runtime;
+using Unity.Collections;          // For NativeArray and Allocator
+using Unity.Collections.LowLevel.Unsafe; // For unsafe NativeArray operations
+using UnityEngine.Rendering;
+using System;
 
 public class TestShaderWithBuffer : MonoBehaviour
 {
@@ -27,7 +31,12 @@ public class TestShaderWithBuffer : MonoBehaviour
     private int calcFacesKernelHandle;
     private int mapGaussiansKernelHandle;
     private bool isInitialized = false;
-
+    public struct GaussianData
+    {
+        public Vector4 rotation;  // Quaternion rotation (x, y, z, w)
+        public Vector3 scaling;   // Scaling vector (x, y, z)
+        public float shIndex;
+    }
     void Start()
     {
         if (hahaImporter == null || poseController == null)
@@ -124,11 +133,66 @@ public class TestShaderWithBuffer : MonoBehaviour
     {
         if (gaussianRenderer != null && UpdatedXyzBuffer != null)
         {
-            Vector3[] updatedPositions = new Vector3[UpdatedXyzBuffer.count];
-            UpdatedXyzBuffer.GetData(updatedPositions);
-            gaussianRenderer.m_GpuPosData.SetData(updatedPositions);
+            int updatedCount = UpdatedXyzBuffer.count;
+            if (updatedCount > 0)
+            {
+                Vector3[] updatedPositions = new Vector3[updatedCount];
+                UpdatedXyzBuffer.GetData(updatedPositions);
+                gaussianRenderer.m_GpuPosData.SetData(updatedPositions);
+            }
+        }
+
+        if (gaussianRenderer != null && GaussianDataBuffer != null)
+        {
+            // Use stride of 32 bytes: 16 (rotation) + 12 (scaling) + 4 (SH index)
+            int gaussianCount = GaussianDataBuffer.count;
+            if (gaussianCount > 0)
+            {
+                int requiredBufferSize = gaussianCount * 32;
+
+                // Check if buffer size matches the required size
+                if (gaussianRenderer.m_GpuOtherData == null || gaussianRenderer.m_GpuOtherData.count != gaussianCount)
+                {
+                    // Release existing buffer if needed
+                    gaussianRenderer.m_GpuOtherData?.Dispose();
+
+                    // Create a GraphicsBuffer with correct size and stride
+                    gaussianRenderer.m_GpuOtherData = new GraphicsBuffer(GraphicsBuffer.Target.Structured, gaussianCount, 32);
+                }
+
+                // Prepare data
+                GaussianData[] gaussianDataArray = new GaussianData[gaussianCount];
+                GaussianDataBuffer.GetData(gaussianDataArray);
+
+                byte[] newOtherData = new byte[requiredBufferSize];
+                for (int i = 0; i < gaussianCount; i++)
+                {
+                    int offset = i * 32;
+
+                    // Copy rotation (Vector4 - 16 bytes)
+                    Buffer.BlockCopy(BitConverter.GetBytes(gaussianDataArray[i].rotation.x), 0, newOtherData, offset, 4);
+                    Buffer.BlockCopy(BitConverter.GetBytes(gaussianDataArray[i].rotation.y), 0, newOtherData, offset + 4, 4);
+                    Buffer.BlockCopy(BitConverter.GetBytes(gaussianDataArray[i].rotation.z), 0, newOtherData, offset + 8, 4);
+                    Buffer.BlockCopy(BitConverter.GetBytes(gaussianDataArray[i].rotation.w), 0, newOtherData, offset + 12, 4);
+
+                    // Copy scaling (Vector3 - 12 bytes)
+                    Buffer.BlockCopy(BitConverter.GetBytes(gaussianDataArray[i].scaling.x), 0, newOtherData, offset + 16, 4);
+                    Buffer.BlockCopy(BitConverter.GetBytes(gaussianDataArray[i].scaling.y), 0, newOtherData, offset + 20, 4);
+                    Buffer.BlockCopy(BitConverter.GetBytes(gaussianDataArray[i].scaling.z), 0, newOtherData, offset + 24, 4);
+
+                    // SH index (set as 0 for now, 4 bytes)
+                    Buffer.BlockCopy(BitConverter.GetBytes(0), 0, newOtherData, offset + 28, 4);
+                }
+
+                // Update the GraphicsBuffer with the new data
+                gaussianRenderer.m_GpuOtherData.SetData(newOtherData);
+            }
         }
     }
+
+
+
+
 
     void OnDestroy()
     {
