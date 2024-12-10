@@ -10,7 +10,13 @@ public class PoseController : MonoBehaviour
     private Transform[] joints;         // Array to store SMPL-X joint transforms
     private bool isTPose = true;        // Toggle between poses
     private SkinnedMeshRenderer smr;    // Reference to SkinnedMeshRenderer
+    void Awake()
+    {
+        smplx.ResetBodyPose();
+        Debug.Log("ResetTPose");
+        
 
+    }
     void Start()
     {
         // Validate the SMPL-X reference
@@ -75,11 +81,12 @@ public class PoseController : MonoBehaviour
         {
             if (isTPose)
             {
-                ApplyCustomPose(GenerateRandomPose()); // Apply a random pose
+                smplx.SetBodyPose(SMPLX.BodyPose.A);
+                // ApplyCustomPose(GenerateRandomPose()); // Apply a random pose
             }
             else
             {
-                ApplyTPose(); // Apply predefined T-pose
+                smplx.SetBodyPose(SMPLX.BodyPose.C);
             }
 
             // Update the GPU vertex buffer with the baked mesh data
