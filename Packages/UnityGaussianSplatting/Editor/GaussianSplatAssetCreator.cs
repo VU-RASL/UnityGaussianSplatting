@@ -579,7 +579,7 @@ namespace GaussianSplatting.Editor
 
                 // color
                 splat.dc0 = GaussianUtils.SH0ToColor(splat.dc0);
-                splat.opacity = GaussianUtils.Sigmoid(splat.opacity);
+                // splat.opacity = GaussianUtils.Sigmoid(splat.opacity);
 
                 splatData[index] = splat;
             }

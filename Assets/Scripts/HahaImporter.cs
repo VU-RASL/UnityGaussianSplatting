@@ -20,6 +20,7 @@ public class HahaImporter : MonoBehaviour
         public Vector3[] positions; // xyz of gaussians
         public Vector3[] scaling; // scales of gaussians
         public Vector4[] rotation;  // original rotation of gaussians
+        public float[] opacity;
         public Texture2D texture;
         public int[] gaussianToFace; // Mapping from Gaussian to face
         public Face[] facesToVerts; // Face indices (N x 3 array)
@@ -35,6 +36,7 @@ public class HahaImporter : MonoBehaviour
             positions = getVertices(data._xyz);
             scaling = getVertices(data._scaling);
             rotation = getRotation(data._rotation);
+            opacity = getOpacity(data._opacity);
             texture = ConvertToTexture(data._trainable_texture);
             File.WriteAllBytes(texSavePath, texture.EncodeToPNG());
             Debug.Log("Texture saved to: " + texSavePath);
@@ -49,6 +51,16 @@ public class HahaImporter : MonoBehaviour
                 betas[i] = _betas[0][i];
             }
             return betas;
+        }
+        public float[] getOpacity(float[][] _opacity)
+        {
+            int rows = _opacity.Length;
+            float[] opacity = new float[rows];
+            for (int i = 0; i < rows; i++)
+            {
+                opacity[i] = _opacity[i][0];
+            }
+            return opacity;
         }
 
         public int[] getGaussianToFace(int[] _gaussian_to_face)
@@ -148,6 +160,7 @@ public class HahaImporter : MonoBehaviour
             public int[] _gaussian_to_face;
             public int[][] _faces;
             public float[][] _rotation;
+            public float[][] _opacity;
         }
     }
 

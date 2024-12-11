@@ -228,14 +228,15 @@ namespace GaussianSplatting.Runtime
             DebugPoints,
             DebugPointIndices,
             DebugBoxes,
-            DebugChunkBounds,
+            DebugChunkBounds
+           
         }
         public GaussianSplatAsset m_Asset;
 
-        [Range(0.1f, 2.0f)] [Tooltip("Additional scaling factor for the splats")]
+        // [Range(0.1f, 2.0f)] [Tooltip("Additional scaling factor for the splats")]
         public float m_SplatScale = 1.0f;
-        [Range(0.05f, 20.0f)]
-        [Tooltip("Additional scaling factor for opacity")]
+        // [Range(0.05f, 20.0f)]
+        // [Tooltip("Additional scaling factor for opacity")]
         public float m_OpacityScale = 1.0f;
         [Range(0, 3)] [Tooltip("Spherical Harmonics order to use")]
         public int m_SHOrder = 3;
