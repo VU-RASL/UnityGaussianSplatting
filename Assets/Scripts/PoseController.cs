@@ -10,13 +10,19 @@ public class PoseController : MonoBehaviour
     private Transform[] joints;         // Array to store SMPL-X joint transforms
     private bool isTPose = true;        // Toggle between poses
     private SkinnedMeshRenderer smr;    // Reference to SkinnedMeshRenderer
+    [SerializeField] public HahaImporter hahaImporter;
     void Awake()
     {
-        smplx.ResetBodyPose();
-        Debug.Log("ResetTPose");
         
+        
+        Debug.Log(hahaImporter.data.betas);
+        smplx.ResetBodyPose();
+        
+        Debug.Log("ResetTPose");
+
 
     }
+
     void Start()
     {
         // Validate the SMPL-X reference
@@ -43,12 +49,13 @@ public class PoseController : MonoBehaviour
 
         // Initialize the joints array from the SMPL-X hierarchy
         InitializeJoints();
-
+        UpdateSMPLXBetas(hahaImporter.data.betas);
         // Initialize the GPU vertex buffer
         InitializeVertexBuffer();
-
+        
         // Start the pose animation loop
         StartCoroutine(AnimatePose());
+        
     }
 
     void InitializeJoints()
@@ -57,7 +64,24 @@ public class PoseController : MonoBehaviour
         joints = smplx.GetComponentsInChildren<Transform>();
         Debug.Log($"Found {joints.Length} joints in SMPL-X hierarchy.");
     }
+    void UpdateSMPLXBetas(float[] betas)
+    {
+        if (betas.Length != SMPLX.NUM_BETAS)
+        {
+            Debug.LogError($"Invalid betas length! Expected  {SMPLX.NUM_BETAS} values.");
+            return;
+        }
 
+        // Update the betas array in the SMPLX class
+        for (int i = 0; i < SMPLX.NUM_BETAS; i++)
+        {
+            smplx.betas[i] = betas[i];
+        }
+
+        // Apply the updated betas to the SMPLX model
+        smplx.SetBetaShapes();
+        Debug.Log("Updated and applied new betas to SMPLX model.");
+    }
     void InitializeVertexBuffer()
     {
         // Create the GPU buffer for vertices
@@ -77,6 +101,7 @@ public class PoseController : MonoBehaviour
 
     System.Collections.IEnumerator AnimatePose()
     {
+        
         while (true)
         {
             if (isTPose)

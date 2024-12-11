@@ -9,6 +9,7 @@ public class HahaImporter : MonoBehaviour
 {
     public string path = "Assets/HahaData/state_dict.json";
     public string texSavePath = "Assets/HahaData/extracted_texture.png";
+    [SerializeField] public SMPLX smplx; // Reference to the SMPL-X model
 
     public HahaAvatarData data;
 
@@ -160,7 +161,7 @@ public class HahaImporter : MonoBehaviour
     {
         // Load data from the file
         data = new HahaAvatarData(path, texSavePath);
-
+        
         // Initialize GPU buffers
         InitializeBuffers();
     }
