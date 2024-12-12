@@ -25,6 +25,8 @@ namespace GaussianSplatting.Editor
         SerializedProperty m_PropOpacityScale;
         SerializedProperty m_PropSHOrder;
         SerializedProperty m_PropSHOnly;
+        SerializedProperty m_PropDCOnly;
+
         SerializedProperty m_PropSortNthFrame;
         SerializedProperty m_PropRenderMode;
         SerializedProperty m_PropPointDisplaySize;
@@ -58,7 +60,7 @@ namespace GaussianSplatting.Editor
         public void OnEnable()
         {
             m_ExportBakeTransform = EditorPrefs.GetBool(kPrefExportBake, false);
-
+            m_PropDCOnly = serializedObject.FindProperty("m_DCOnly");
             m_PropAsset = serializedObject.FindProperty("m_Asset");
             m_PropSplatScale = serializedObject.FindProperty("m_SplatScale");
             m_PropOpacityScale = serializedObject.FindProperty("m_OpacityScale");
@@ -107,6 +109,8 @@ namespace GaussianSplatting.Editor
             EditorGUILayout.PropertyField(m_PropOpacityScale);
             EditorGUILayout.PropertyField(m_PropSHOrder);
             EditorGUILayout.PropertyField(m_PropSHOnly);
+            EditorGUILayout.PropertyField(m_PropDCOnly);
+
             EditorGUILayout.PropertyField(m_PropSortNthFrame);
 
             EditorGUILayout.Space();
