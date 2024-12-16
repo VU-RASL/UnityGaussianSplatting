@@ -4,6 +4,7 @@ public class VertexCountLogger : MonoBehaviour
 {
     void Start()
     {
+
         // Get the Mesh from the MeshFilter or SkinnedMeshRenderer
         Mesh mesh = null;
 
