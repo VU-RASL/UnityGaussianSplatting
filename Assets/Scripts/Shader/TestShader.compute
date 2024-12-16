@@ -62,8 +62,9 @@ void CalcFacesTransform(uint3 id : SV_DispatchThreadID)
         return;
 
     // Load face vertex indices
-    int3 face = FaceBuffer[id.x];
-
+    // int3 face = FaceBuffer[id.x];
+    int faceIndex = GaussianToFaceBuffer[id.x];  // Map Gaussian to face index
+    int3 face = FaceBuffer[faceIndex];  
     // Get face vertices
     float3 v0 = VertexBuffer[face.x];
     float3 v1 = VertexBuffer[face.y];
@@ -109,10 +110,12 @@ void MapGaussiansToFaces(uint3 id : SV_DispatchThreadID)
     int faceIndex = GaussianToFaceBuffer[id.x];
 
     // Map T, R, k for this Gaussian
-    float3 T = TBuffer[faceIndex];
-    float4 R = RBuffer[faceIndex];
-    float k = kBuffer[faceIndex];
-
+    // float3 T = TBuffer[faceIndex];
+    // float4 R = RBuffer[faceIndex];
+    // float k = kBuffer[faceIndex];
+    float3 T = TBuffer[id.x];
+    float4 R = RBuffer[id.x];
+    float k = kBuffer[id.x];
     // Normalize rotation and compute rigid rotation
     float4 originalRotation = HahaRotationBuffer[id.x];
     originalRotation = q_normalize(originalRotation);

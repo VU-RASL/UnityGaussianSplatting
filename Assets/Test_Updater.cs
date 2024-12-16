@@ -96,6 +96,7 @@ public class TestShaderWithBuffer : MonoBehaviour
         testShader.SetBuffer(calcFacesKernelHandle, "TBuffer", TBuffer);
         testShader.SetBuffer(calcFacesKernelHandle, "RBuffer", RBuffer);
         testShader.SetBuffer(calcFacesKernelHandle, "kBuffer", kBuffer);
+        testShader.SetBuffer(calcFacesKernelHandle,  "GaussianToFaceBuffer", gaussianToFaceBuffer);
 
         testShader.SetBuffer(mapGaussiansKernelHandle, "GaussianToFaceBuffer", gaussianToFaceBuffer);
         testShader.SetBuffer(mapGaussiansKernelHandle, "HahaXyzBuffer", haha_xyzBuffer);

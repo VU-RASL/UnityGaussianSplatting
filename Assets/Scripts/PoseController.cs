@@ -1,4 +1,6 @@
 using UnityEngine;
+using System.Collections.Generic;
+using System.IO;
 
 public class PoseController : MonoBehaviour
 {
@@ -168,7 +170,19 @@ public class PoseController : MonoBehaviour
         Debug.Log($"Generated pose length: {randomPose.Length}");
         return randomPose;
     }
+    [System.Serializable]
+    public class FaceIndexData
+    {
+        public int FaceIndex;
+        public int[] VertexIndices;
+    }
 
+    // Class to hold the list of face data for JSON serialization
+    [System.Serializable]
+    public class FaceIndexDataList
+    {
+        public List<FaceIndexData> Faces;
+    }
     void UpdateVertexBuffer()
     {
         if (smr == null)
@@ -204,6 +218,36 @@ public class PoseController : MonoBehaviour
         {
             Debug.LogError("Vertex buffer is not initialized!");
         }
+
+
+        // Get the triangles (face indices)
+        int[] triangles = bakedMesh.triangles;
+
+        // Create a list to store face-to-vertex index mappings
+        List<FaceIndexData> faceToVertexIndices = new List<FaceIndexData>();
+
+        // Iterate through the triangles (each face has 3 indices)
+        for (int i = 0; i < triangles.Length; i += 3)
+        {
+            // Get the indices of the vertices for this face
+            int v0 = triangles[i];
+            int v1 = triangles[i + 1];
+            int v2 = triangles[i + 2];
+
+            // Add the face index and its vertex indices to the list
+            faceToVertexIndices.Add(new FaceIndexData
+            {
+                FaceIndex = i / 3,
+                VertexIndices = new int[] { v0, v1, v2 }
+            });
+        }
+
+        // Convert to JSON and save to file
+        string json = JsonUtility.ToJson(new FaceIndexDataList { Faces = faceToVertexIndices }, true);
+        string path = Path.Combine(Application.dataPath, "FaceToVertexIndices.json");
+        File.WriteAllText(path, json);
+
+        Debug.Log($"Face-to-vertex indices mapping saved to {path}");
     }
 
     void OnDestroy()
