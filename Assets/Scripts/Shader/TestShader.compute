@@ -30,12 +30,40 @@ RWStructuredBuffer<float3> UpdatedXyzBuffer;    // Updated Gaussian positions
 // Constants
 #define MAX_SCALE 0.05
 
-// Helper function: Normalize a quaternion
-float4 q_normalize(float4 q)
+// Function to compute quaternion from a 3x3 rotation matrix
+float4 MatrixToQuaternion(float3x3 m)
 {
-    float norm = sqrt(dot(q, q));
-    return q / norm;
+    float4 q;
+    float trace = m[0][0] + m[1][1] + m[2][2]; // Sum of diagonal elements
+
+    float q_abs[4];
+    q_abs[0] = sqrt(max(0.0, 1.0 + m[0][0] + m[1][1] + m[2][2]));
+    q_abs[1] = sqrt(max(0.0, 1.0 + m[0][0] - m[1][1] - m[2][2]));
+    q_abs[2] = sqrt(max(0.0, 1.0 - m[0][0] + m[1][1] - m[2][2]));
+    q_abs[3] = sqrt(max(0.0, 1.0 - m[0][0] - m[1][1] + m[2][2]));
+
+    float4 quat_candidates[4];
+    quat_candidates[0] = float4(q_abs[0] * 0.5, (m[2][1] - m[1][2]) / (2.0 * q_abs[0]), (m[0][2] - m[2][0]) / (2.0 * q_abs[0]), (m[1][0] - m[0][1]) / (2.0 * q_abs[0]));
+    quat_candidates[1] = float4((m[2][1] - m[1][2]) / (2.0 * q_abs[1]), q_abs[1] * 0.5, (m[1][0] + m[0][1]) / (2.0 * q_abs[1]), (m[0][2] + m[2][0]) / (2.0 * q_abs[1]));
+    quat_candidates[2] = float4((m[0][2] - m[2][0]) / (2.0 * q_abs[2]), (m[1][0] + m[0][1]) / (2.0 * q_abs[2]), q_abs[2] * 0.5, (m[2][1] + m[1][2]) / (2.0 * q_abs[2]));
+    quat_candidates[3] = float4((m[1][0] - m[0][1]) / (2.0 * q_abs[3]), (m[0][2] + m[2][0]) / (2.0 * q_abs[3]), (m[2][1] + m[1][2]) / (2.0 * q_abs[3]), q_abs[3] * 0.5);
+
+    // Find the best quaternion candidate (numerically stable, largest q_abs)
+    int max_index = 0;
+    float max_value = q_abs[0];
+    for (int i = 1; i < 4; i++)
+    {
+        if (q_abs[i] > max_value)
+        {
+            max_index = i;
+            max_value = q_abs[i];
+        }
+    }
+
+    q = quat_candidates[max_index];
+    return normalize(q);
 }
+
 
 // Helper function: Apply quaternion to vector
 float3 quaternion_apply(float4 q, float3 v)
@@ -75,24 +103,30 @@ void CalcFacesTransform(uint3 id : SV_DispatchThreadID)
     TBuffer[id.x] = T;
 
     // Calculate vectors for face edges
-    float3 vec1 = normalize(v1 - v0);
-    float3 vec2 = normalize(v2 - v0);
+    // float3 vec1 = normalize(v1 - v0);
+    // float3 vec2 = normalize(v2 - v0);
+    float3 vec1 = v2 - v1;
+    float3 vec2 = v0 - v1;
+    float3 vec3 = v0 - v2;
 
     // Calculate normal and orthonormal basis
-    float3 normal = normalize(cross(vec1, vec2));
-    float3 prod = normalize(cross(vec1, normal));
+    float3 v12cross = cross(vec1,vec2);
+    float3 norm = normalize(v12cross);
+    vec1 = normalize(vec1);
+    float3 prod = normalize(cross(vec1, norm));
 
     // Build rotation matrix
-    float3x3 rotmat = float3x3(vec1, normal, prod);
+    float3x3 rotmat = float3x3(vec1, norm, prod);
     rotmat = transpose(rotmat);
 
     // Convert rotation matrix to quaternion (R)
-    float4 R = q_normalize(float4(rotmat[0][0], rotmat[0][1], rotmat[0][2], 0.0));
+    // float4 R = normalize(float4(rotmat[0][0], rotmat[0][1], rotmat[0][2], 0.0));
+    float4 R = MatrixToQuaternion(rotmat);
     RBuffer[id.x] = R;
 
     // Calculate area and edge lengths for scaling factor (k)
-    float area = length(cross(v1 - v0, v2 - v0));
-    float vec3_length = length(v2 - v1);
+    float area = length(v12cross);
+    float vec3_length = length(vec3);
     float h = area / vec3_length;
 
     float k = (h + vec3_length) / (2.0 * MAX_SCALE);
@@ -118,8 +152,8 @@ void MapGaussiansToFaces(uint3 id : SV_DispatchThreadID)
     float k = kBuffer[id.x];
     // Normalize rotation and compute rigid rotation
     float4 originalRotation = HahaRotationBuffer[id.x];
-    originalRotation = q_normalize(originalRotation);
-    float4 rigidRotation = q_normalize(float4(
+    originalRotation = normalize(originalRotation);
+    float4 rigidRotation = normalize(float4(
         R.w * originalRotation.x + R.x * originalRotation.w + R.y * originalRotation.z - R.z * originalRotation.y,
         R.w * originalRotation.y - R.x * originalRotation.z + R.y * originalRotation.w + R.z * originalRotation.x,
         R.w * originalRotation.z + R.x * originalRotation.y - R.y * originalRotation.x + R.z * originalRotation.w,
