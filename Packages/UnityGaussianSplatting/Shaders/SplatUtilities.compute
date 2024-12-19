@@ -243,10 +243,11 @@ void CSCalcViewData (uint3 id : SV_DispatchThreadID)
         col.a = min(splat.opacity * opacityScale, 65000);
         col.rgb = ShadeSH(splat.sh, objViewDir, _SHOrder, false);
         col.rgb = splat.sh.col;
+        col.rgb = saturate(col.rgb);
 
         // decode from SH to normal color range (0-1)
-        float3 displayColor = (splat.sh.col - 0.5) / 0.2820948 ;
-        col.rgb = displayColor; // when DC ONLY
+        // float3 displayColor = (splat.sh.col - 0.) / 0.2820948 ;
+        // col.rgb = displayColor; // when DC ONLY
         
         // }
         // If _SHOnly == 1 and _DCOnly == 0, we already have only SH from ShadeSH

@@ -7,12 +7,12 @@ using Unity.Mathematics;
 public class PoseController : MonoBehaviour
 {
     [SerializeField] public SMPLX smplx; // Reference to the SMPL-X model
-    // public float poseSwitchTime = 3f;   // Time in seconds to switch poses
+    public float poseSwitchTime = 3f;   // Time in seconds to switch poses
     // public Material smplxMaterial;     // Assign the material with your custom shader
 
     public ComputeBuffer vertexBuffer; // GPU buffer to store vertex positions
     private Transform[] joints;         // Array to store SMPL-X joint transforms
-    // private bool isTPose = true;        // Toggle between poses
+    private bool isTPose = true;        // Toggle between poses
     private SkinnedMeshRenderer smr;    // Reference to SkinnedMeshRenderer
     [SerializeField] public HahaImporter hahaImporter;
 
@@ -57,6 +57,7 @@ public class PoseController : MonoBehaviour
         // }
 
         // Get the SkinnedMeshRenderer component
+        Mesh bakedMesh = new Mesh();
         smr = smplx.GetComponentInChildren<SkinnedMeshRenderer>();
         if (smr == null)
         {
@@ -76,7 +77,7 @@ public class PoseController : MonoBehaviour
 
         
         // Start the pose animation loop
-        // StartCoroutine(AnimatePose());
+        StartCoroutine(AnimatePose());
         
     }
 
@@ -142,28 +143,28 @@ public class PoseController : MonoBehaviour
         Debug.Log("Initialized GPU buffer for vertex positions and assigned it to the material.");
     }
 
-    // System.Collections.IEnumerator AnimatePose()
-    // {
+    System.Collections.IEnumerator AnimatePose()
+    {
         
-    //     while (true)
-    //     {
-    //         if (isTPose)
-    //         {
-    //             smplx.SetBodyPose(SMPLX.BodyPose.A);
-    //             // ApplyCustomPose(GenerateRandomPose()); // Apply a random pose
-    //         }
-    //         else
-    //         {
-    //             smplx.SetBodyPose(SMPLX.BodyPose.C);
-    //         }
+        while (true)
+        {
+            if (isTPose)
+            {
+                smplx.SetBodyPose(SMPLX.BodyPose.A);
+                // ApplyCustomPose(GenerateRandomPose()); // Apply a random pose
+            }
+            else
+            {
+                smplx.SetBodyPose(SMPLX.BodyPose.C);
+            }
 
-    //         // Update the GPU vertex buffer with the baked mesh data
-    //         UpdateVertexBuffer();
+            // Update the GPU vertex buffer with the baked mesh data
+            UpdateVertexBuffer();
 
-    //         isTPose = !isTPose; // Toggle pose state
-    //         yield return new WaitForSeconds(poseSwitchTime);
-    //     }
-    // }
+            isTPose = !isTPose; // Toggle pose state
+            yield return new WaitForSeconds(poseSwitchTime);
+        }
+    }
 
     void ApplyTPose()
     {

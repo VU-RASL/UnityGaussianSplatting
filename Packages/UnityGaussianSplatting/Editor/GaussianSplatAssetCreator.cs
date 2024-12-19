@@ -280,7 +280,7 @@ namespace GaussianSplatting.Editor
             boundsJob.Schedule().Complete();
 
             EditorUtility.DisplayProgressBar(kProgressTitle, "Morton reordering", 0.05f);
-            ReorderMorton(inputSplats, boundsMin, boundsMax);
+            // ReorderMorton(inputSplats, boundsMin, boundsMax);
 
             // cluster SHs
             NativeArray<int> splatSHIndices = default;
@@ -578,6 +578,10 @@ namespace GaussianSplatting.Editor
                 splat.scale = GaussianUtils.LinearScale(splat.scale);
 
                 // color
+                // splat.dc0.x = Mathf.Clamp(splat.dc0.x, 0f, 1f);
+                // splat.dc0.y = Mathf.Clamp(splat.dc0.y, 0f, 1f);
+                // splat.dc0.z = Mathf.Clamp(splat.dc0.z, 0f, 1f);
+
                 splat.dc0 =splat.dc0;
                 splat.opacity = GaussianUtils.Sigmoid(splat.opacity);
 
