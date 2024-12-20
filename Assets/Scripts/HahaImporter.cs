@@ -27,14 +27,14 @@ public class HahaImporter : MonoBehaviour
     void Start()
     {
         // Load data from the file
-        string remappedFacesPath = "Assets/RemappedFaces.txt";
-        data = new HahaAvatarData(path, texSavePath, remappedFacesPath);
+        data = new HahaAvatarData(path, texSavePath);
         
         // Initialize GPU buffers   
         InitializeBuffers();
         ExportGaussianToFace();
         ExportColors();
     }
+
     void ExportGaussianToFace()
     {
         if (data.gaussianToFace == null || data.gaussianToFace.Length == 0)
@@ -154,7 +154,8 @@ public class HahaImporter : MonoBehaviour
 [Serializable]
 public class HahaAvatarData
 {
-    public int splatCount;            
+    public int splatCount;
+    public int faceCount;         
     public float[] betas; // SMPLX betas
     public float3[] offsets; 
     public float3[] colors; // rgb 
@@ -178,13 +179,14 @@ public class HahaAvatarData
         public int[][] _faces;
     }
 
-    public HahaAvatarData(string path, string texSavePath, string remappedFacesPath)
+    public HahaAvatarData(string path)
     {
         string content = File.ReadAllText(path);
 
         HahaOutputData data = JsonConvert.DeserializeObject<HahaOutputData>(content);
-        data = SwitchHandedness(data);
+        // data = SwitchHandedness(data);
         splatCount = data._xyz.Length;
+        faceCount = data._faces.Length;
         betas = processF1Data(data._betas[0]);
         offsets = processF3Data(data._xyz);
         colors = processF3Data(data._color);
@@ -194,29 +196,13 @@ public class HahaAvatarData
         gaussianToFace = processInt1Data(data._gaussian_to_face);
         facesToVerts = processInt3Data(data._faces);
         texture = ConvertToTexture(data._trainable_texture);
-        File.WriteAllBytes(texSavePath, texture.EncodeToPNG());
+    }
 
-        // Load remapped faces from file    
-        // facesToVerts = LoadRemappedFaces(remappedFacesPath);
-        
-        // Debug.Log("Texture saved to: " + texSavePath);
-    }
-    private int3[] LoadRemappedFaces(string filePath)
+    public HahaAvatarData(string path, string texSavePath): this(path)
     {
-        // Read the remapped faces file
-        string[] lines = File.ReadAllLines(filePath);
-        int3[] remappedFaces = new int3[lines.Length];
-        for (int i = 0; i < lines.Length; i++)
-        {
-            string[] values = lines[i].Split(',');
-            remappedFaces[i] = new int3(
-                int.Parse(values[0]),
-                int.Parse(values[1]),
-                int.Parse(values[2])
-            );
-        }
-        return remappedFaces;
+        File.WriteAllBytes(texSavePath, texture.EncodeToPNG());
     }
+
     // convert from SMPLX right-handed coordinates to unity left-handed coordinates
     HahaOutputData SwitchHandedness(HahaOutputData data)
     {
