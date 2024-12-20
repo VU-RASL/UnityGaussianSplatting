@@ -77,7 +77,7 @@ public class PoseController : MonoBehaviour
 
         
         // Start the pose animation loop
-        StartCoroutine(AnimatePose());
+        // StartCoroutine(AnimatePose());
         
     }
 

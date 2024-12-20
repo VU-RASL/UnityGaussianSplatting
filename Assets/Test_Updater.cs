@@ -4,6 +4,7 @@ using Unity.Collections;          // For NativeArray and Allocator
 using Unity.Collections.LowLevel.Unsafe; // For unsafe NativeArray operations
 using UnityEngine.Rendering;
 using System;
+using Unity.Mathematics;
 
 public class TestShaderWithBuffer : MonoBehaviour
 {
@@ -170,16 +171,24 @@ public class TestShaderWithBuffer : MonoBehaviour
                 {
                     int offset = i * 32;
 
+                    float4 rot = gaussianDataArray[i].rotation;
+                    rot = GaussianUtils.NormalizeSwizzleRotation(rot);
+                    rot = GaussianUtils.PackSmallest3Rotation(rot);
+
+                    float3 scale = gaussianDataArray[i].scaling;
+                    scale = GaussianUtils.LinearScale(scale);
+                    
+
                     // Copy rotation (Vector4 - 16 bytes)
-                    Buffer.BlockCopy(BitConverter.GetBytes(gaussianDataArray[i].rotation.x), 0, newOtherData, offset, 4);
-                    Buffer.BlockCopy(BitConverter.GetBytes(gaussianDataArray[i].rotation.y), 0, newOtherData, offset + 4, 4);
-                    Buffer.BlockCopy(BitConverter.GetBytes(gaussianDataArray[i].rotation.z), 0, newOtherData, offset + 8, 4);
-                    Buffer.BlockCopy(BitConverter.GetBytes(gaussianDataArray[i].rotation.w), 0, newOtherData, offset + 12, 4);
+                    Buffer.BlockCopy(BitConverter.GetBytes(rot.x), 0, newOtherData, offset, 4);
+                    Buffer.BlockCopy(BitConverter.GetBytes(rot.y), 0, newOtherData, offset + 4, 4);
+                    Buffer.BlockCopy(BitConverter.GetBytes(rot.z), 0, newOtherData, offset + 8, 4);
+                    Buffer.BlockCopy(BitConverter.GetBytes(rot.w), 0, newOtherData, offset + 12, 4);
 
                     // Copy scaling (Vector3 - 12 bytes)
-                    Buffer.BlockCopy(BitConverter.GetBytes(gaussianDataArray[i].scaling.x), 0, newOtherData, offset + 16, 4);
-                    Buffer.BlockCopy(BitConverter.GetBytes(gaussianDataArray[i].scaling.y), 0, newOtherData, offset + 20, 4);
-                    Buffer.BlockCopy(BitConverter.GetBytes(gaussianDataArray[i].scaling.z), 0, newOtherData, offset + 24, 4);
+                    Buffer.BlockCopy(BitConverter.GetBytes(scale.x), 0, newOtherData, offset + 16, 4);
+                    Buffer.BlockCopy(BitConverter.GetBytes(scale.y), 0, newOtherData, offset + 20, 4);
+                    Buffer.BlockCopy(BitConverter.GetBytes(scale.z), 0, newOtherData, offset + 24, 4);
 
                     // SH index (set as 0 for now, 4 bytes)
                     Buffer.BlockCopy(BitConverter.GetBytes(0), 0, newOtherData, offset + 28, 4);

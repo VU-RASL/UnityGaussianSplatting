@@ -109,6 +109,10 @@ public class VisualDataChecker : MonoBehaviour
         float3 vec2 = v0 - v1;
         float3 vec3 = v0 - v2;
 
+        vec1.x *= -1;
+        vec2.x *= -1;
+        vec3.x *= -1;
+
         // Calculate normal and orthonormal basis
         float3 v12cross = math.cross(vec1,vec2);
         float3 norm = math.normalize(v12cross);
@@ -140,6 +144,7 @@ public class VisualDataChecker : MonoBehaviour
             float4 gRf = data.rotations[i];
             float3 gS = data.scaling[i];
             float3 col = data.colors[i];
+            col = math.clamp(col, 0.0f, 1.0f);
 
             Vector3 fT = new Vector3(T[idf].x,T[idf].y,T[idf].z);
             Vector3 gOffset = new Vector3(gOffsetf.x,gOffsetf.y,gOffsetf.z);
@@ -148,7 +153,10 @@ public class VisualDataChecker : MonoBehaviour
             Quaternion gR = new Quaternion(gRf.x,gRf.y,gRf.z,gRf.w);
 
             Vector3 position = fT + fR * gOffset * k[idf];
+            position.x *= -1;
             Quaternion rotation = fR * gR;
+            rotation.x *= -1;
+            rotation.w *= -1;
             Vector3 scale = Activate(gS) * k[idf];
 
             Color color = new Color(col.x, col.y, col.z);
