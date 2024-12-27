@@ -12,11 +12,11 @@ StructuredBuffer<int3> FaceBuffer;          // Faces (indices of vertices)
 StructuredBuffer<int> GaussianToFaceBuffer; // Mapping from Gaussian to face indices
 StructuredBuffer<float3> HahaXyzBuffer;     // Original Gaussian positions
 StructuredBuffer<float4> HahaRotationBuffer; // Original Gaussian rotations
-StructuredBuffer<float> HahaScalingBuffer;  // Original Gaussian scaling
+StructuredBuffer<float3> HahaScalingBuffer;  // Original Gaussian scaling
 RWStructuredBuffer<float3> TBuffer;         // Translations (output)
 RWStructuredBuffer<float4> RBuffer;         // Rotations as quaternions (output)
 RWStructuredBuffer<float> kBuffer;          // Scaling factors (output)
-
+RWStructuredBuffer<float> tempBuffer;          // Scaling factors (output)
 // Combined Gaussian-specific buffer
 struct GaussianData
 {
@@ -29,12 +29,28 @@ RWStructuredBuffer<GaussianData> GaussianDataBuffer; // Combined buffer
 RWStructuredBuffer<float3> UpdatedXyzBuffer;    // Updated Gaussian positions
 
 // Constants
-#define MAX_SCALE 0.05
+#define MAX_SCALE 0.05f
 
 // Scaling activation function
 float3 s_act(float3 x)
 {
-    return MIN_S_VALUE + saturate(1.0 / (1.0 + exp(-x))) * (MAX_S_VALUE - MIN_S_VALUE);
+    return MIN_S_VALUE + (1.0 / (1.0 + exp(-x) + 1e-6)) * (MAX_S_VALUE - MIN_S_VALUE);
+}
+float3 normalize_safe(float3 v)
+{
+    float len = length(v) + 1e-6; // Add a small epsilon to avoid division by zero
+    return v / len;
+}
+
+float3 rotate_vector_new(float3 v, float4 q)
+{
+    // Quaternion rotation: q * v * q^-1
+    float3 t = 2.0 * cross(q.xyz, v);
+    return v + q.w * t + cross(q.xyz, t);
+}
+float3 hard_sigmoid(float3 x)
+{
+    return clamp(0.2 * x + 0.5, 0.0, 1.0);
 }
 
 // Kernel: Compute translations, rotations, and scaling factors for faces
@@ -45,9 +61,9 @@ void CalcFacesTransform(uint3 id : SV_DispatchThreadID)
         return;
 
     // Load face vertex indices
-    int3 face = FaceBuffer[id.x];
-    // int faceIndex = GaussianToFaceBuffer[id.x];  // Map Gaussian to face index
-    // int3 face = FaceBuffer[faceIndex];  
+    // int3 face = FaceBuffer[id.x];
+    int faceIndex = GaussianToFaceBuffer[id.x];  // Map Gaussian to face index
+    int3 face = FaceBuffer[faceIndex];  
     // Get face vertices
     float3 v0 = VertexBuffer[face.x];
     float3 v1 = VertexBuffer[face.y];
@@ -60,35 +76,65 @@ void CalcFacesTransform(uint3 id : SV_DispatchThreadID)
     // Calculate vectors for face edges
     // float3 vec1 = normalize(v1 - v0);
     // float3 vec2 = normalize(v2 - v0);
+    // float3 vec1 = v2 - v1;
+    // float3 vec2 = v0 - v1;
+    // float3 vec3 = v0 - v2;
+
+    // vec1.x *= -1;
+    // vec2.x *= -1;
+    // vec3.x *= -1;
+
     float3 vec1 = v2 - v1;
     float3 vec2 = v0 - v1;
     float3 vec3 = v0 - v2;
-
-    vec1.x *= -1;
-    vec2.x *= -1;
-    vec3.x *= -1;
+    // vec1.x *= -1;
+    // vec2.x *= -1;
+    // vec3.x *= -1;
 
     // Calculate normal and orthonormal basis
     float3 v12cross = cross(vec1,vec2);
-    float3 norm = normalize(v12cross);
-    vec1 = normalize(vec1);
-    float3 prod = normalize(cross(vec1, norm));
 
+
+    if (dot(v12cross, cross(vec1, vec2)) < 0.0) {
+        v12cross = -v12cross;
+    }
+    float3 norm = normalize(v12cross);
+    // norm.x *= -1;
+
+    vec1 = normalize_safe(vec1);
+    float3 prod = normalize(cross(vec1, norm));
+    // tempBuffer[id.x * 3 + 0] = prod.x;
+    // tempBuffer[id.x * 3 + 1] = prod.y;
+    // tempBuffer[id.x * 3 + 2] = prod.z;
     // Build rotation matrix
     float3x3 rotmat = float3x3(vec1, norm, prod);
     rotmat = transpose(rotmat);
+    
+    // int offset = id.x * 9; // Each rotmat occupies 9 floats
+    // tempBuffer[offset + 0] = rotmat[0][0];
+    // tempBuffer[offset + 1] = rotmat[0][1];
+    // tempBuffer[offset + 2] = rotmat[0][2];
+    // tempBuffer[offset + 3] = rotmat[1][0];
+    // tempBuffer[offset + 4] = rotmat[1][1];
+    // tempBuffer[offset + 5] = rotmat[1][2];
+    // tempBuffer[offset + 6] = rotmat[2][0];
+    // tempBuffer[offset + 7] = rotmat[2][1];
+    // tempBuffer[offset + 8] = rotmat[2][2];
 
     // Convert rotation matrix to quaternion (R)
     // float4 R = normalize(float4(rotmat[0][0], rotmat[0][1], rotmat[0][2], 0.0));
     float4 R = MatrixToQuaternion(rotmat);
+    // R = StandardizeQuaternion(R); // Ensure consistent representation
+
     RBuffer[id.x] = R;
 
     // Calculate area and edge lengths for scaling factor (k)
     float area = length(v12cross);
     float vec3_length = length(vec3);
     float h = area / vec3_length;
-
-    float k = (h + vec3_length) / (2.0 * MAX_SCALE);
+    // tempBuffer[id.x] = h + vec3_length;
+    float k = (h + vec3_length) * 0.5 / MAX_SCALE;
+        
     kBuffer[id.x] = k;
 }
 
@@ -99,16 +145,16 @@ void MapGaussiansToFaces(uint3 id : SV_DispatchThreadID)
     if (id.x >= GaussianToFaceBuffer.Length)
         return;
 
-    // Get the face index corresponding to this Gaussian
-    int faceIndex = GaussianToFaceBuffer[id.x];
-
-    // Map T, R, k for this Gaussian
-    float3 T = TBuffer[faceIndex];
-    float4 R = RBuffer[faceIndex];
-    float k = kBuffer[faceIndex];
-    // float3 T = TBuffer[id.x];
-    // float4 R = RBuffer[id.x];
-    // float k = kBuffer[id.x];
+    
+    // int Index = id.x;
+  
+    // int faceIndex = GaussianToFaceBuffer[id.x];
+    // float3 T = TBuffer[faceIndex];
+    // float4 R = RBuffer[faceIndex];
+    // float k = kBuffer[faceIndex];
+    float3 T = TBuffer[id.x];
+    float4 R = RBuffer[id.x];
+    float k = kBuffer[id.x];
 
     // Normalize rotation and compute rigid rotation
     float3 gOffset = HahaXyzBuffer[id.x]; // gaussian position offset
@@ -118,10 +164,13 @@ void MapGaussiansToFaces(uint3 id : SV_DispatchThreadID)
     // Compute and write to buffers
     GaussianData data;
     float4 rot = qmul(R,gR);
+    rot = normalize(rot);
     rot.x *= -1;
     rot.w *= -1;
     data.rotation = rot;
-    data.scaling = s_act(gS) * k;
+    data.scaling = s_act(gS) * k ;
+    float3 tem = s_act(gS);
+    tempBuffer[id.x ] = gS;
 
     GaussianDataBuffer[id.x] = data;
 

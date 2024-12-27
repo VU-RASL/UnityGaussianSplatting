@@ -23,7 +23,7 @@ namespace GaussianSplatting.Editor
         const string kCamerasJson = "cameras.json";
         const string kPrefQuality = "nesnausk.GaussianSplatting.CreatorQuality";
         const string kPrefOutputFolder = "nesnausk.GaussianSplatting.CreatorOutputFolder";
-
+        public string PathOther { get; private set; }
         enum DataQuality
         {
             VeryHigh,
@@ -227,6 +227,7 @@ namespace GaussianSplatting.Editor
             public float opacity;
             public Vector3 scale;
             public Quaternion rot;
+            
         }
 
         static T CreateOrReplaceAsset<T>(T asset, string path) where T : UnityEngine.Object
@@ -244,6 +245,7 @@ namespace GaussianSplatting.Editor
             }
             return result;
         }
+        public NativeArray<InputSplatData> InputSplats { get; private set; }
 
         unsafe void CreateAsset()
         {
@@ -264,6 +266,8 @@ namespace GaussianSplatting.Editor
             EditorUtility.DisplayProgressBar(kProgressTitle, "Reading data files", 0.0f);
             GaussianSplatAsset.CameraInfo[] cameras = LoadJsonCamerasFile(m_InputFile, m_ImportCameras);
             using NativeArray<InputSplatData> inputSplats = LoadPLYSplatFile(m_InputFile);
+            InputSplats = new NativeArray<InputSplatData>(inputSplats, Allocator.Persistent);
+
             if (inputSplats.Length == 0)
             {
                 EditorUtility.ClearProgressBar();
@@ -305,7 +309,7 @@ namespace GaussianSplatting.Editor
             string pathCol = $"{m_OutputFolder}/{baseName}_col.bytes";
             string pathSh = $"{m_OutputFolder}/{baseName}_shs.bytes";
             LinearizeData(inputSplats);
-
+            
             // if we are using full lossless (FP32) data, then do not use any chunking, and keep data as-is
             bool useChunks = isUsingChunks;
             if (useChunks)
@@ -315,6 +319,7 @@ namespace GaussianSplatting.Editor
             CreateColorData(inputSplats, pathCol, ref dataHash);
             CreateSHData(inputSplats, pathSh, ref dataHash, clusteredSHs);
             asset.SetDataHash(dataHash);
+            PathOther = $"{m_OutputFolder}/{baseName}_oth.bytes";
 
             splatSHIndices.Dispose();
             clusteredSHs.Dispose();
@@ -371,7 +376,7 @@ namespace GaussianSplatting.Editor
 
             // reorder SHs
             NativeArray<float> floatData = verticesRawData.Reinterpret<float>(1);
-            ReorderSHs(splatCount, (float*)floatData.GetUnsafePtr());
+            // ReorderSHs(splatCount, (float*)floatData.GetUnsafePtr());
 
             return verticesRawData.Reinterpret<InputSplatData>(1);
         }
@@ -852,7 +857,7 @@ namespace GaussianSplatting.Editor
         }
 
         [BurstCompile]
-        struct CreateOtherDataJob : IJobParallelFor
+        public struct CreateOtherDataJob : IJobParallelFor
         {
             [ReadOnly] public NativeArray<InputSplatData> m_Input;
             [NativeDisableContainerSafetyRestriction] [ReadOnly] public NativeArray<int> m_SplatSHIndices;
@@ -911,7 +916,7 @@ namespace GaussianSplatting.Editor
             data.Dispose();
         }
 
-        void CreateOtherData(NativeArray<InputSplatData> inputSplats, string filePath, ref Hash128 dataHash, NativeArray<int> splatSHIndices)
+        public void CreateOtherData(NativeArray<InputSplatData> inputSplats, string filePath, ref Hash128 dataHash, NativeArray<int> splatSHIndices)
         {
             int formatSize = GaussianSplatAsset.GetOtherSizeNoSHIndex(m_FormatScale);
             if (splatSHIndices.IsCreated)

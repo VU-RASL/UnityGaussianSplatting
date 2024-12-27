@@ -31,8 +31,8 @@ public class HahaImporter : MonoBehaviour
         
         // Initialize GPU buffers   
         InitializeBuffers();
-        ExportGaussianToFace();
-        ExportColors();
+        // ExportGaussianToFace();
+        // ExportColors();
     }
 
     void ExportGaussianToFace()
@@ -132,7 +132,10 @@ public class HahaImporter : MonoBehaviour
     {
         return haha_scalingBuffer;
     }
-
+    public float3[] GetHAHAScaling()
+    {
+        return data.scaling;
+    }
     public ComputeBuffer GetHahaRotationBuffer()
     {
         return haha_rotationBuffer;

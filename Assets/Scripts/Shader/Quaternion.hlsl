@@ -221,8 +221,9 @@ float4 MatrixToQuaternion(float3x3 m)
     }
 
     q = quat_candidates[max_index];
-    return normalize(q);
+    return normalize(q); // Ensure the quaternion is normalized
 }
+
 
 float4x4 quaternion_to_matrix(float4 quat)
 {
@@ -250,5 +251,16 @@ float4x4 quaternion_to_matrix(float4 quat)
 
     return m;
 }
+float4 StandardizeQuaternion(float4 q)
+{
+    // If the real part (w) is negative, negate the quaternion
+    if (q.w < 0.0)
+    {
+        q = -q;
+    }
+    return q;
+}
+
+
 
 #endif // __QUATERNION_INCLUDED__

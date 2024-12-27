@@ -5,11 +5,17 @@ using Unity.Collections.LowLevel.Unsafe; // For unsafe NativeArray operations
 using UnityEngine.Rendering;
 using System;
 using Unity.Mathematics;
+using GaussianSplatting.Editor;
+using System.IO;
 
 public class TestShaderWithBuffer : MonoBehaviour
 {
     public ComputeShader testShader;
     public HahaImporter hahaImporter;
+    private GaussianSplatAssetCreator assetCreator; // Reference to GaussianSplatAssetCreator
+    private NativeArray<GaussianSplatAssetCreator.InputSplatData> inputSplats;
+    private NativeArray<int> splatSHIndices;
+
     public PoseController poseController;
     [SerializeField] private GameObject gaussianSplatsObject;
     private GaussianSplatRenderer gaussianRenderer;
@@ -24,7 +30,7 @@ public class TestShaderWithBuffer : MonoBehaviour
     private ComputeBuffer TBuffer;
     private ComputeBuffer RBuffer;
     private ComputeBuffer kBuffer;
-
+    private ComputeBuffer tempBuffer;
     // Combined Gaussian-specific buffer
     private ComputeBuffer GaussianDataBuffer;
     private ComputeBuffer UpdatedXyzBuffer;
@@ -47,6 +53,8 @@ public class TestShaderWithBuffer : MonoBehaviour
         }
 
         gaussianRenderer = gaussianSplatsObject.GetComponent<GaussianSplatRenderer>();
+        assetCreator = new GaussianSplatAssetCreator();
+
         if (gaussianRenderer == null)
         {
             Debug.LogError("GaussianSplatRenderer not assigned!");
@@ -61,7 +69,8 @@ public class TestShaderWithBuffer : MonoBehaviour
         gaussianToFaceBuffer = hahaImporter.GetGaussianToFaceBuffer();
         haha_xyzBuffer = hahaImporter.GetHahaXyzBuffer();
         haha_rotationBuffer = hahaImporter.GetHahaRotationBuffer();
-        haha_scalingBuffer = hahaImporter.GetHahaScalingBuffer();
+        // haha_scalingBuffer = hahaImporter.GetHahaScalingBuffer();
+        float3[] haha_scaling = hahaImporter.GetHAHAScaling();
         faceBuffer = hahaImporter.GetFaceBuffer();
         vertexBuffer = poseController.GetVertexBuffer();
 
@@ -73,16 +82,87 @@ public class TestShaderWithBuffer : MonoBehaviour
 
         int faceCount = faceBuffer.count;
         int gaussianCount = gaussianToFaceBuffer.count;
-
-        TBuffer = new ComputeBuffer(faceCount, sizeof(float) * 3);
-        RBuffer = new ComputeBuffer(faceCount, sizeof(float) * 4);
-        kBuffer = new ComputeBuffer(faceCount, sizeof(float));
-
+        haha_scalingBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 3);
+        haha_scalingBuffer.SetData(haha_scaling);
+        SaveHahaScalingToTxt();
+        TBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 3);
+        RBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 4);
+        kBuffer = new ComputeBuffer(gaussianCount, sizeof(float));
+        tempBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 3);
         GaussianDataBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * (3 + 4 + 1));
         UpdatedXyzBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 3);
         isInitialized = true;
-
+        // SaveVertexBufferAsTxt();
         InitializeComputeShader();
+
+    }
+
+void SaveHahaScalingToTxt()
+{
+    if (haha_scalingBuffer == null)
+    {
+        Debug.LogError("HahaScalingBuffer is null! Ensure it is initialized.");
+        return;
+    }
+
+    string filePath = "Assets/GaussianAssets/HahaScaling.txt";
+
+    try
+    {
+        int count = haha_scalingBuffer.count;
+        Vector3[] data = new Vector3[count];
+        haha_scalingBuffer.GetData(data); // Fetch actual buffer data
+
+        using (StreamWriter writer = new StreamWriter(filePath))
+        {
+            writer.WriteLine("HahaScaling (Scaling Vectors):");
+            foreach (var item in data)
+            {
+                writer.WriteLine($"{item.x} {item.y} {item.z}"); // Write x, y, z for each scaling vector
+            }
+        }
+
+        Debug.Log($"HahaScalingBuffer saved to: {filePath}");
+    }
+    catch (Exception ex)
+    {
+        Debug.LogError($"Error saving HahaScalingBuffer: {ex.Message}");
+    }
+}
+
+
+    void SaveVertexBufferAsTxt()
+    {
+        if (vertexBuffer == null)
+        {
+            Debug.LogError("VertexBuffer is null! Ensure the PoseController is initialized and the VertexBuffer is set.");
+            return;
+        }
+
+        string vertexFilePath = "Assets/GaussianAssets/VertexBuffer.txt";
+
+        try
+        {
+            // Read vertex data from the buffer
+            int vertexCount = vertexBuffer.count;
+            Vector3[] vertices = new Vector3[vertexCount];
+            vertexBuffer.GetData(vertices);
+
+            // Write the vertices to the file
+            using (StreamWriter writer = new StreamWriter(vertexFilePath))
+            {
+                foreach (var vertex in vertices)
+                {
+                    writer.WriteLine($"{vertex.x} {vertex.y} {vertex.z}");
+                }
+            }
+
+            Debug.Log($"VertexBuffer saved to: {vertexFilePath}");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Error saving VertexBuffer: {ex.Message}");
+        }
     }
 
     void InitializeComputeShader()
@@ -99,6 +179,9 @@ public class TestShaderWithBuffer : MonoBehaviour
         testShader.SetBuffer(calcFacesKernelHandle, "kBuffer", kBuffer);
         testShader.SetBuffer(calcFacesKernelHandle,  "GaussianToFaceBuffer", gaussianToFaceBuffer);
 
+
+
+
         testShader.SetBuffer(mapGaussiansKernelHandle, "GaussianToFaceBuffer", gaussianToFaceBuffer);
         testShader.SetBuffer(mapGaussiansKernelHandle, "HahaXyzBuffer", haha_xyzBuffer);
         testShader.SetBuffer(mapGaussiansKernelHandle, "HahaRotationBuffer", haha_rotationBuffer);
@@ -108,6 +191,7 @@ public class TestShaderWithBuffer : MonoBehaviour
         testShader.SetBuffer(mapGaussiansKernelHandle, "kBuffer", kBuffer);
         testShader.SetBuffer(mapGaussiansKernelHandle, "GaussianDataBuffer", GaussianDataBuffer);
         testShader.SetBuffer(mapGaussiansKernelHandle, "UpdatedXyzBuffer", UpdatedXyzBuffer);
+        testShader.SetBuffer(mapGaussiansKernelHandle, "tempBuffer", tempBuffer);
 
         ExecuteShader();
     }
@@ -129,8 +213,189 @@ public class TestShaderWithBuffer : MonoBehaviour
         testShader.Dispatch(mapGaussiansKernelHandle, gaussianThreadGroups, 1, 1);
 
         UpdateGaussianRenderer();
+        CreateOtherDataAsset();
+        SaveTBufferToTxt();
+        SaveRBufferToTxt();
+        SaveKBufferToTxt();
+        SavetempBufferToTxt();
+        DebugFaceBuffer();
+        DebugGaussianToFaceBuffer();
+    }
+void DebugGaussianToFaceBuffer()
+{
+    if (gaussianToFaceBuffer == null)
+    {
+        Debug.LogError("GaussianToFaceBuffer is null!");
+        return;
     }
 
+    int gaussianCount = gaussianToFaceBuffer.count;
+    int[] gaussianToFaceData = new int[gaussianCount];
+    gaussianToFaceBuffer.GetData(gaussianToFaceData);
+
+    using (StreamWriter writer = new StreamWriter("Assets/GaussianToFaceBuffer.txt"))
+    {
+        for (int i = 0; i < gaussianToFaceData.Length; i++)
+        {
+            writer.WriteLine($"Gaussian {i} -> Face {gaussianToFaceData[i]}");
+        }
+    }
+
+    Debug.Log("GaussianToFaceBuffer saved to file.");
+}
+void SaveTBufferToTxt()
+{
+    if (TBuffer == null)
+    {
+        Debug.LogError("TBuffer is null! Ensure it is initialized.");
+        return;
+    }
+
+    string filePath = "Assets/GaussianAssets/TBuffer.txt";
+
+    try
+    {
+        int count = TBuffer.count;
+        Vector3[] data = new Vector3[count];
+        TBuffer.GetData(data); // Fetch actual buffer data
+
+        using (StreamWriter writer = new StreamWriter(filePath))
+        {
+            writer.WriteLine("TBuffer (Translation Vectors):");
+            foreach (var item in data)
+            {
+                writer.WriteLine($"{item.x} {item.y} {item.z}"); // Write x, y, z for each row
+            }
+        }
+
+        Debug.Log($"TBuffer saved to: {filePath}");
+    }
+    catch (Exception ex)
+    {
+        Debug.LogError($"Error saving TBuffer: {ex.Message}");
+    }
+}
+
+void SaveRBufferToTxt()
+{
+    if (RBuffer == null)
+    {
+        Debug.LogError("RBuffer is null! Ensure it is initialized.");
+        return;
+    }
+
+    string filePath = "Assets/GaussianAssets/RBuffer.txt";
+
+    try
+    {
+        int count = RBuffer.count;
+        Quaternion[] data = new Quaternion[count];
+        RBuffer.GetData(data); // Fetch actual buffer data
+
+        using (StreamWriter writer = new StreamWriter(filePath))
+        {
+            writer.WriteLine("RBuffer (Rotation Quaternions):");
+            foreach (var item in data)
+            {
+                writer.WriteLine($"{item.x} {item.y} {item.z} {item.w}"); // Write quaternion x, y, z, w
+            }
+        }
+
+        Debug.Log($"RBuffer saved to: {filePath}");
+    }
+    catch (Exception ex)
+    {
+        Debug.LogError($"Error saving RBuffer: {ex.Message}");
+    }
+}
+
+void SaveKBufferToTxt()
+{
+    if (kBuffer == null)
+    {
+        Debug.LogError("kBuffer is null! Ensure it is initialized.");
+        return;
+    }
+
+    string filePath = "Assets/GaussianAssets/kBuffer.txt";
+
+    try
+    {
+        int count = kBuffer.count;
+        float[] data = new float[count];
+        kBuffer.GetData(data); // Fetch actual buffer data
+
+        using (StreamWriter writer = new StreamWriter(filePath))
+        {
+            writer.WriteLine("kBuffer (Scaling Factors):");
+            foreach (var item in data)
+            {
+                writer.WriteLine($"{item}"); // Write each scaling factor
+            }
+        }
+
+        Debug.Log($"kBuffer saved to: {filePath}");
+    }
+    catch (Exception ex)
+    {
+        Debug.LogError($"Error saving kBuffer: {ex.Message}");
+    }
+}
+void DebugFaceBuffer()
+{
+    if (faceBuffer == null)
+    {
+        Debug.LogError("FaceBuffer is null!");
+        return;
+    }
+
+    int faceCount = faceBuffer.count;
+    int3[] faceData = new int3[faceCount];
+    faceBuffer.GetData(faceData);
+
+    using (StreamWriter writer = new StreamWriter("Assets/FaceBuffer.txt"))
+    {
+        for (int i = 0; i < faceData.Length; i++)
+        {
+            writer.WriteLine($"Face {i}: {faceData[i].x} {faceData[i].y} {faceData[i].z}");
+        }
+    }
+
+    Debug.Log("FaceBuffer saved to file.");
+}
+void SavetempBufferToTxt()
+{
+    if (tempBuffer == null)
+    {
+        Debug.LogError("tempBuffer is null! Ensure it is initialized.");
+        return;
+    }
+
+    string filePath = "Assets/GaussianAssets/tempBuffer.txt";
+
+    try
+    {
+        int count = tempBuffer.count; // Get the number of elements
+        Vector3[] data = new Vector3[count]; // Use Vector3 to match float3 in the shader
+        tempBuffer.GetData(data); // Fetch data from the buffer
+
+        using (StreamWriter writer = new StreamWriter(filePath))
+        {
+            writer.WriteLine("tempBuffer (v12cross):");
+            foreach (var item in data)
+            {
+                writer.WriteLine($"{item.x} {item.y} {item.z}"); // Save x, y, z values
+                //  writer.WriteLine($"{item}");
+            }
+        }
+
+        Debug.Log($"tempBuffer data saved to: {filePath}");
+    }
+    catch (Exception ex)
+    {
+        Debug.LogError($"Error saving tempBuffer: {ex.Message}");
+    }
+}
     void UpdateGaussianRenderer()
     {
         if (gaussianRenderer != null && UpdatedXyzBuffer != null)
@@ -143,62 +408,139 @@ public class TestShaderWithBuffer : MonoBehaviour
                 gaussianRenderer.m_GpuPosData.SetData(updatedPositions);
             }
         }
+        
+        // if (gaussianRenderer != null && GaussianDataBuffer != null)
+        // {
+        //     // Use stride of 32 bytes: 16 (rotation) + 12 (scaling) + 4 (SH index)
+        //     int gaussianCount = GaussianDataBuffer.count;
+        //     if (gaussianCount > 0)
+        //     {
+        //         int requiredBufferSize = gaussianCount * 32;
 
-        if (gaussianRenderer != null && GaussianDataBuffer != null)
-        {
-            // Use stride of 32 bytes: 16 (rotation) + 12 (scaling) + 4 (SH index)
-            int gaussianCount = GaussianDataBuffer.count;
-            if (gaussianCount > 0)
-            {
-                int requiredBufferSize = gaussianCount * 32;
+        //         // Check if buffer size matches the required size
+        //         if (gaussianRenderer.m_GpuOtherData == null || gaussianRenderer.m_GpuOtherData.count != gaussianCount)
+        //         {
+        //             // Release existing buffer if needed
+        //             gaussianRenderer.m_GpuOtherData?.Dispose();
 
-                // Check if buffer size matches the required size
-                if (gaussianRenderer.m_GpuOtherData == null || gaussianRenderer.m_GpuOtherData.count != gaussianCount)
-                {
-                    // Release existing buffer if needed
-                    gaussianRenderer.m_GpuOtherData?.Dispose();
+        //             // Create a GraphicsBuffer with correct size and stride
+        //             gaussianRenderer.m_GpuOtherData = new GraphicsBuffer(GraphicsBuffer.Target.Structured, gaussianCount, 32);
+        //         }
 
-                    // Create a GraphicsBuffer with correct size and stride
-                    gaussianRenderer.m_GpuOtherData = new GraphicsBuffer(GraphicsBuffer.Target.Structured, gaussianCount, 32);
-                }
+        //         // Prepare data
+        //         GaussianData[] gaussianDataArray = new GaussianData[gaussianCount];
+        //         GaussianDataBuffer.GetData(gaussianDataArray);
 
-                // Prepare data
-                GaussianData[] gaussianDataArray = new GaussianData[gaussianCount];
-                GaussianDataBuffer.GetData(gaussianDataArray);
+        //         byte[] newOtherData = new byte[requiredBufferSize];
+        //         for (int i = 0; i < gaussianCount; i++)
+        //         {
+        //             int offset = i * 32;
 
-                byte[] newOtherData = new byte[requiredBufferSize];
-                for (int i = 0; i < gaussianCount; i++)
-                {
-                    int offset = i * 32;
+        //             float4 rot = gaussianDataArray[i].rotation;
+        //             rot = GaussianUtils.NormalizeSwizzleRotation(rot);
+        //             rot = GaussianUtils.PackSmallest3Rotation(rot);
 
-                    float4 rot = gaussianDataArray[i].rotation;
-                    rot = GaussianUtils.NormalizeSwizzleRotation(rot);
-                    rot = GaussianUtils.PackSmallest3Rotation(rot);
-
-                    float3 scale = gaussianDataArray[i].scaling;
-                    scale = GaussianUtils.LinearScale(scale);
+        //             float3 scale = gaussianDataArray[i].scaling;
+        //             scale = GaussianUtils.LinearScale(scale);
                     
 
-                    // Copy rotation (Vector4 - 16 bytes)
-                    Buffer.BlockCopy(BitConverter.GetBytes(rot.x), 0, newOtherData, offset, 4);
-                    Buffer.BlockCopy(BitConverter.GetBytes(rot.y), 0, newOtherData, offset + 4, 4);
-                    Buffer.BlockCopy(BitConverter.GetBytes(rot.z), 0, newOtherData, offset + 8, 4);
-                    Buffer.BlockCopy(BitConverter.GetBytes(rot.w), 0, newOtherData, offset + 12, 4);
+        //             // Copy rotation (Vector4 - 16 bytes)
+        //             Buffer.BlockCopy(BitConverter.GetBytes(rot.x), 0, newOtherData, offset, 4);
+        //             Buffer.BlockCopy(BitConverter.GetBytes(rot.y), 0, newOtherData, offset + 4, 4);
+        //             Buffer.BlockCopy(BitConverter.GetBytes(rot.z), 0, newOtherData, offset + 8, 4);
+        //             Buffer.BlockCopy(BitConverter.GetBytes(rot.w), 0, newOtherData, offset + 12, 4);
 
-                    // Copy scaling (Vector3 - 12 bytes)
-                    Buffer.BlockCopy(BitConverter.GetBytes(scale.x), 0, newOtherData, offset + 16, 4);
-                    Buffer.BlockCopy(BitConverter.GetBytes(scale.y), 0, newOtherData, offset + 20, 4);
-                    Buffer.BlockCopy(BitConverter.GetBytes(scale.z), 0, newOtherData, offset + 24, 4);
+        //             // Copy scaling (Vector3 - 12 bytes)
+        //             Buffer.BlockCopy(BitConverter.GetBytes(scale.x), 0, newOtherData, offset + 16, 4);
+        //             Buffer.BlockCopy(BitConverter.GetBytes(scale.y), 0, newOtherData, offset + 20, 4);
+        //             Buffer.BlockCopy(BitConverter.GetBytes(scale.z), 0, newOtherData, offset + 24, 4);
 
-                    // SH index (set as 0 for now, 4 bytes)
-                    Buffer.BlockCopy(BitConverter.GetBytes(0), 0, newOtherData, offset + 28, 4);
+        //             // SH index (set as 0 for now, 4 bytes)
+        //             Buffer.BlockCopy(BitConverter.GetBytes(0), 0, newOtherData, offset + 28, 4);
+        //         }
+
+        //         // Update the GraphicsBuffer with the new data
+        //         gaussianRenderer.m_GpuOtherData.SetData(newOtherData);
+        //     }
+        // }
+    }
+
+    void CreateOtherDataAsset()
+{
+    NativeArray<GaussianSplatAssetCreator.InputSplatData> updatedInputSplats = default;
+    NativeArray<int> splatSHIndices = default;
+    if (assetCreator == null)
+    {
+        Debug.Log("Null");
+        return;
+    }
+
+    try
+    {
+        if (gaussianRenderer != null && GaussianDataBuffer != null)
+        {
+            int gaussianCount = GaussianDataBuffer.count;
+
+            // Retrieve Gaussian data
+            GaussianData[] gaussianDataArray = new GaussianData[gaussianCount];
+            GaussianDataBuffer.GetData(gaussianDataArray);
+
+            updatedInputSplats = new NativeArray<GaussianSplatAssetCreator.InputSplatData>(gaussianCount, Allocator.TempJob);
+            
+            // Initialize file paths for rotations and scales
+            string rotationFilePath = "Assets/GaussianAssets/rotations.txt";
+            string scaleFilePath = "Assets/GaussianAssets/scales.txt";
+            
+            // Open file streams for writing
+            // using (StreamWriter rotationWriter = new StreamWriter(rotationFilePath))
+            // using (StreamWriter scaleWriter = new StreamWriter(scaleFilePath))
+            {
+                for (int i = 0; i < gaussianCount; i++)
+                {
+                    // Write rotation (quaternion) to file
+                    Quaternion rotation = new Quaternion(
+                        gaussianDataArray[i].rotation.x,
+                        gaussianDataArray[i].rotation.y,
+                        gaussianDataArray[i].rotation.z,
+                        gaussianDataArray[i].rotation.w
+                    );
+                    // rotationWriter.WriteLine($"{rotation.x} {rotation.y} {rotation.z} {rotation.w}");
+
+                    // Write scale (vector) to file
+                    Vector3 scale = gaussianDataArray[i].scaling;
+                    // scaleWriter.WriteLine($"{scale.x} {scale.y} {scale.z}");
+
+                    // Update InputSplatData
+                    updatedInputSplats[i] = new GaussianSplatAssetCreator.InputSplatData
+                    {
+                        rot = rotation,
+                        scale = scale,
+                        pos = Vector3.zero,
+                        dc0 = Vector3.zero,
+                        opacity = 1.0f
+                    };
                 }
-
-                // Update the GraphicsBuffer with the new data
-                gaussianRenderer.m_GpuOtherData.SetData(newOtherData);
             }
+
+            splatSHIndices = new NativeArray<int>(gaussianCount, Allocator.TempJob);
+
+            string pathOther = "Assets/GaussianAssets/male3-test_oth.bytes";
+            if (string.IsNullOrEmpty(pathOther))
+            {
+                Debug.LogError("PathOther is not set in GaussianSplatAssetCreator!");
+                return;
+            }
+
+            Hash128 dataHash = new Hash128();
+            assetCreator.CreateOtherData(updatedInputSplats, pathOther, ref dataHash, splatSHIndices);
         }
     }
+    finally
+    {
+        if (updatedInputSplats.IsCreated) updatedInputSplats.Dispose();
+        if (splatSHIndices.IsCreated) splatSHIndices.Dispose();
+    }
+}
 
 
 
