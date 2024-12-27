@@ -84,11 +84,12 @@ public class TestShaderWithBuffer : MonoBehaviour
         int gaussianCount = gaussianToFaceBuffer.count;
         haha_scalingBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 3);
         haha_scalingBuffer.SetData(haha_scaling);
+        // haha_scalingBuffer.GetData()
         SaveHahaScalingToTxt();
         TBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 3);
         RBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 4);
         kBuffer = new ComputeBuffer(gaussianCount, sizeof(float));
-        tempBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 3);
+        tempBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 4);
         GaussianDataBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * (3 + 4 + 1));
         UpdatedXyzBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 3);
         isInitialized = true;
@@ -110,7 +111,7 @@ void SaveHahaScalingToTxt()
     try
     {
         int count = haha_scalingBuffer.count;
-        Vector3[] data = new Vector3[count];
+        float3[] data = new float3[count];
         haha_scalingBuffer.GetData(data); // Fetch actual buffer data
 
         using (StreamWriter writer = new StreamWriter(filePath))
@@ -206,7 +207,7 @@ void SaveHahaScalingToTxt()
     {
         if (!isInitialized) return;
 
-        int faceThreadGroups = Mathf.CeilToInt(faceBuffer.count / 64.0f);
+        int faceThreadGroups = Mathf.CeilToInt(gaussianToFaceBuffer.count / 64.0f);
         testShader.Dispatch(calcFacesKernelHandle, faceThreadGroups, 1, 1);
 
         int gaussianThreadGroups = Mathf.CeilToInt(gaussianToFaceBuffer.count / 64.0f);
@@ -214,12 +215,12 @@ void SaveHahaScalingToTxt()
 
         UpdateGaussianRenderer();
         CreateOtherDataAsset();
-        SaveTBufferToTxt();
-        SaveRBufferToTxt();
-        SaveKBufferToTxt();
+        // SaveTBufferToTxt();
+        // SaveRBufferToTxt();
+        // SaveKBufferToTxt();
         SavetempBufferToTxt();
-        DebugFaceBuffer();
-        DebugGaussianToFaceBuffer();
+        // DebugFaceBuffer();
+        // DebugGaussianToFaceBuffer();
     }
 void DebugGaussianToFaceBuffer()
 {
@@ -376,7 +377,7 @@ void SavetempBufferToTxt()
     try
     {
         int count = tempBuffer.count; // Get the number of elements
-        Vector3[] data = new Vector3[count]; // Use Vector3 to match float3 in the shader
+        Vector4[] data = new Vector4[count]; // Use Vector3 to match float3 in the shader
         tempBuffer.GetData(data); // Fetch data from the buffer
 
         using (StreamWriter writer = new StreamWriter(filePath))
@@ -384,7 +385,7 @@ void SavetempBufferToTxt()
             writer.WriteLine("tempBuffer (v12cross):");
             foreach (var item in data)
             {
-                writer.WriteLine($"{item.x} {item.y} {item.z}"); // Save x, y, z values
+                writer.WriteLine($"{item.x} {item.y} {item.z} {item.w}"); // Save x, y, z values
                 //  writer.WriteLine($"{item}");
             }
         }
@@ -488,8 +489,8 @@ void SavetempBufferToTxt()
             updatedInputSplats = new NativeArray<GaussianSplatAssetCreator.InputSplatData>(gaussianCount, Allocator.TempJob);
             
             // Initialize file paths for rotations and scales
-            string rotationFilePath = "Assets/GaussianAssets/rotations.txt";
-            string scaleFilePath = "Assets/GaussianAssets/scales.txt";
+            // string rotationFilePath = "Assets/GaussianAssets/rotations.txt";
+            // string scaleFilePath = "Assets/GaussianAssets/scales.txt";
             
             // Open file streams for writing
             // using (StreamWriter rotationWriter = new StreamWriter(rotationFilePath))
@@ -498,12 +499,17 @@ void SavetempBufferToTxt()
                 for (int i = 0; i < gaussianCount; i++)
                 {
                     // Write rotation (quaternion) to file
+
+                    float4 rot = gaussianDataArray[i].rotation;
+                    rot = GaussianUtils.NormalizeSwizzleRotation(rot);
+                    rot = GaussianUtils.PackSmallest3Rotation(rot);
                     Quaternion rotation = new Quaternion(
-                        gaussianDataArray[i].rotation.x,
-                        gaussianDataArray[i].rotation.y,
-                        gaussianDataArray[i].rotation.z,
-                        gaussianDataArray[i].rotation.w
+                        rot.x,
+                        rot.y,
+                        rot.z,
+                        rot.w
                     );
+       
                     // rotationWriter.WriteLine($"{rotation.x} {rotation.y} {rotation.z} {rotation.w}");
 
                     // Write scale (vector) to file
@@ -514,7 +520,7 @@ void SavetempBufferToTxt()
                     updatedInputSplats[i] = new GaussianSplatAssetCreator.InputSplatData
                     {
                         rot = rotation,
-                        scale = scale,
+                        scale = GaussianUtils.LinearScale(scale),
                         pos = Vector3.zero,
                         dc0 = Vector3.zero,
                         opacity = 1.0f
@@ -524,13 +530,15 @@ void SavetempBufferToTxt()
 
             splatSHIndices = new NativeArray<int>(gaussianCount, Allocator.TempJob);
 
+
+
+
             string pathOther = "Assets/GaussianAssets/male3-test_oth.bytes";
             if (string.IsNullOrEmpty(pathOther))
             {
                 Debug.LogError("PathOther is not set in GaussianSplatAssetCreator!");
                 return;
             }
-
             Hash128 dataHash = new Hash128();
             assetCreator.CreateOtherData(updatedInputSplats, pathOther, ref dataHash, splatSHIndices);
         }

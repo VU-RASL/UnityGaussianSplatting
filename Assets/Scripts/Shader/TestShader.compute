@@ -16,7 +16,7 @@ StructuredBuffer<float3> HahaScalingBuffer;  // Original Gaussian scaling
 RWStructuredBuffer<float3> TBuffer;         // Translations (output)
 RWStructuredBuffer<float4> RBuffer;         // Rotations as quaternions (output)
 RWStructuredBuffer<float> kBuffer;          // Scaling factors (output)
-RWStructuredBuffer<float> tempBuffer;          // Scaling factors (output)
+RWStructuredBuffer<float4> tempBuffer;          // Scaling factors (output)
 // Combined Gaussian-specific buffer
 struct GaussianData
 {
@@ -52,7 +52,36 @@ float3 hard_sigmoid(float3 x)
 {
     return clamp(0.2 * x + 0.5, 0.0, 1.0);
 }
+// Raw quaternion multiplication
+float4 quaternion_raw_multiply(float4 a, float4 b)
+{
+    float aw = a.x, ax = a.y, ay = a.z, az = a.w;
+    float bw = b.x, bx = b.y, by = b.z, bz = b.w;
 
+    float ow = aw * bw - ax * bx - ay * by - az * bz;
+    float ox = aw * bx + ax * bw + ay * bz - az * by;
+    float oy = aw * by - ax * bz + ay * bw + az * bx;
+    float oz = aw * bz + ax * by - ay * bx + az * bw;
+
+    return float4(ow, ox, oy, oz);
+}
+
+// Standardize quaternion to ensure non-negative real part
+float4 standardize_quaternion(float4 q)
+{
+    if (q.x < 0.0)
+    {
+        q = -q; // Flip all components if real part is negative
+    }
+    return q;
+}
+
+// Quaternion multiplication with standardization
+float4 quaternion_multiply(float4 a, float4 b)
+{
+    float4 raw_product = quaternion_raw_multiply(a, b);
+    return standardize_quaternion(raw_product);
+}
 // Kernel: Compute translations, rotations, and scaling factors for faces
 [numthreads(64, 1, 1)]
 void CalcFacesTransform(uint3 id : SV_DispatchThreadID)
@@ -124,6 +153,7 @@ void CalcFacesTransform(uint3 id : SV_DispatchThreadID)
     // Convert rotation matrix to quaternion (R)
     // float4 R = normalize(float4(rotmat[0][0], rotmat[0][1], rotmat[0][2], 0.0));
     float4 R = MatrixToQuaternion(rotmat);
+    
     // R = StandardizeQuaternion(R); // Ensure consistent representation
 
     RBuffer[id.x] = R;
@@ -155,7 +185,8 @@ void MapGaussiansToFaces(uint3 id : SV_DispatchThreadID)
     float3 T = TBuffer[id.x];
     float4 R = RBuffer[id.x];
     float k = kBuffer[id.x];
-
+    if (R.x < 0)
+        R = - R;
     // Normalize rotation and compute rigid rotation
     float3 gOffset = HahaXyzBuffer[id.x]; // gaussian position offset
     float4 gR = normalize(HahaRotationBuffer[id.x]); // gaussian rotation
@@ -163,18 +194,21 @@ void MapGaussiansToFaces(uint3 id : SV_DispatchThreadID)
 
     // Compute and write to buffers
     GaussianData data;
-    float4 rot = qmul(R,gR);
-    rot = normalize(rot);
-    rot.x *= -1;
-    rot.w *= -1;
+    float4 rot = quaternion_multiply(R,gR);
+
+
+    // rot = normalize(rot);
+    // rot.x *= -1;
+    // rot.w *= -1;
     data.rotation = rot;
     data.scaling = s_act(gS) * k ;
-    float3 tem = s_act(gS);
-    tempBuffer[id.x ] = gS;
+    // float3 tem = s_act(gS);
+   
 
     GaussianDataBuffer[id.x] = data;
 
     float3 pos = T + rotate_vector(gOffset,R) * k;
-    pos.x *= -1;
+    // pos.x *= -1;
     UpdatedXyzBuffer[id.x] = pos;
+    tempBuffer[id.x ] = rot;
 }

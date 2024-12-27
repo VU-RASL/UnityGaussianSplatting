@@ -195,6 +195,7 @@ public class HahaAvatarData
         colors = processF3Data(data._color);
         rotations = processF4Data(data._rotation);
         scaling = processF3Data(data._scaling);
+     
         opacities = processF1Data(ConvertTo1D(data._opacity));
         gaussianToFace = processInt1Data(data._gaussian_to_face);
         facesToVerts = processInt3Data(data._faces);
