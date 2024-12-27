@@ -12,8 +12,8 @@ public class HahaImporter : MonoBehaviour
 {
     public string path = "Assets/HahaData/state_dict.json";
     public string texSavePath = "Assets/HahaData/extracted_texture.png";
-    public string gaussianToFaceSavePath = "Assets/HahaData/GaussianToFace.txt";
-    public string colorsSavePath = "Assets/HahaData/Colors.txt";
+    public string hahaComparePath;
+    
 
     public HahaAvatarData data;
 
@@ -27,62 +27,62 @@ public class HahaImporter : MonoBehaviour
     void Start()
     {
         // Load data from the file
-        data = new HahaAvatarData(path, texSavePath);
+        data = new HahaAvatarData(path, texSavePath, hahaComparePath);
         
         // Initialize GPU buffers   
         InitializeBuffers();
-        ExportGaussianToFace();
-        ExportColors();
+        // ExportGaussianToFace();
+        // ExportColors();
     }
 
-    void ExportGaussianToFace()
-    {
-        if (data.gaussianToFace == null || data.gaussianToFace.Length == 0)
-        {
-            Debug.LogError("GaussianToFace data is missing or empty.");
-            return;
-        }
+    // void ExportGaussianToFace()
+    // {
+    //     if (data.gaussianToFace == null || data.gaussianToFace.Length == 0)
+    //     {
+    //         Debug.LogError("GaussianToFace data is missing or empty.");
+    //         return;
+    //     }
 
-        try
-        {
-            using (StreamWriter writer = new StreamWriter(gaussianToFaceSavePath))
-            {
-                foreach (int faceIndex in data.gaussianToFace)
-                {
-                    writer.WriteLine(faceIndex);
-                }
-            }
-            Debug.Log($"GaussianToFace mapping exported to: {gaussianToFaceSavePath}");
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"Failed to export GaussianToFace mapping: {e.Message}");
-        }
-    }
-    void ExportColors()
-    {
-        if (data.colors == null || data.colors.Length == 0)
-        {
-            Debug.LogError("Color data is missing or empty.");
-            return;
-        }
+    //     try
+    //     {
+    //         using (StreamWriter writer = new StreamWriter(gaussianToFaceSavePath))
+    //         {
+    //             foreach (int faceIndex in data.gaussianToFace)
+    //             {
+    //                 writer.WriteLine(faceIndex);
+    //             }
+    //         }
+    //         Debug.Log($"GaussianToFace mapping exported to: {gaussianToFaceSavePath}");
+    //     }
+    //     catch (Exception e)
+    //     {
+    //         Debug.LogError($"Failed to export GaussianToFace mapping: {e.Message}");
+    //     }
+    // }
+    // void ExportColors()
+    // {
+    //     if (data.colors == null || data.colors.Length == 0)
+    //     {
+    //         Debug.LogError("Color data is missing or empty.");
+    //         return;
+    //     }
 
-        try
-        {
-            using (StreamWriter writer = new StreamWriter(colorsSavePath))
-            {
-                foreach (float3 color in data.colors)
-                {
-                    writer.WriteLine($"{color.x},{color.y},{color.z}");
-                }
-            }
-            Debug.Log($"Colors exported to: {colorsSavePath}");
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"Failed to export colors: {e.Message}");
-        }
-    }
+    //     try
+    //     {
+    //         using (StreamWriter writer = new StreamWriter(colorsSavePath))
+    //         {
+    //             foreach (float3 color in data.colors)
+    //             {
+    //                 writer.WriteLine($"{color.x},{color.y},{color.z}");
+    //             }
+    //         }
+    //         Debug.Log($"Colors exported to: {colorsSavePath}");
+    //     }
+    //     catch (Exception e)
+    //     {
+    //         Debug.LogError($"Failed to export colors: {e.Message}");
+    //     }
+    // }
     void InitializeBuffers()
     {
         if (data.gaussianToFace != null && data.gaussianToFace.Length > 0)
@@ -179,6 +179,28 @@ public class HahaAvatarData
         public int[][] _faces;
     }
 
+    public class HahaCompareData
+    {
+        public float[][] betas;
+        public float[][] global_orient;
+        public float[][] body_pose;
+        public float[][] transl;
+        public float[][] left_hand_pose;
+        public float[][] right_hand_pose;
+        public float[][] jaw_pose;
+        public float[][] leye_pose;
+        public float[][] reye_pose;
+        public float[][] expression;
+        public float[][] vertices;
+        public float[][] offset_xyz;
+        public float[][] xyz;
+        public float[][] rot;
+        public float[][] scale;
+        public float[][] color;
+        public float[][] opacity;
+        
+    }
+
     public HahaAvatarData(string path)
     {
         string content = File.ReadAllText(path);
@@ -201,6 +223,11 @@ public class HahaAvatarData
     public HahaAvatarData(string path, string texSavePath): this(path)
     {
         File.WriteAllBytes(texSavePath, texture.EncodeToPNG());
+    }
+
+    public HahaAvatarData(string path, string texSavePath, string comparePath): this(path, texSavePath)
+    {
+
     }
 
     // convert from SMPLX right-handed coordinates to unity left-handed coordinates
