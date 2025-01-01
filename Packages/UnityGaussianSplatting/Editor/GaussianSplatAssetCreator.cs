@@ -247,7 +247,7 @@ namespace GaussianSplatting.Editor
         }
         public NativeArray<InputSplatData> InputSplats { get; private set; }
 
-        unsafe void CreateAsset()
+        public unsafe void CreateAsset()
         {
             m_ErrorMessage = null;
             if (string.IsNullOrWhiteSpace(m_InputFile))
@@ -578,9 +578,10 @@ namespace GaussianSplatting.Editor
                 var qq = GaussianUtils.NormalizeSwizzleRotation(new float4(q.x, q.y, q.z, q.w));
                 qq = GaussianUtils.PackSmallest3Rotation(qq);
                 splat.rot = new Quaternion(qq.x, qq.y, qq.z, qq.w);
-
+               
                 // scale
-                splat.scale = GaussianUtils.LinearScale(splat.scale);
+                splat.scale = splat.scale;
+                // splat.scale = GaussianUtils.LinearScale(splat.scale);
 
                 // color
                 // splat.dc0.x = Mathf.Clamp(splat.dc0.x, 0f, 1f);
