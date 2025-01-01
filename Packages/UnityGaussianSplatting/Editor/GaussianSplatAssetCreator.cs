@@ -579,6 +579,7 @@ namespace GaussianSplatting.Editor
                 qq = GaussianUtils.PackSmallest3Rotation(qq);
                 splat.rot = new Quaternion(qq.x, qq.y, qq.z, qq.w);
                
+               
                 // scale
                 splat.scale = splat.scale;
                 // splat.scale = GaussianUtils.LinearScale(splat.scale);
