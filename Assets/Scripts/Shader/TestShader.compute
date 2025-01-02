@@ -16,7 +16,7 @@ StructuredBuffer<float3> HahaScalingBuffer;  // Original Gaussian scaling
 RWStructuredBuffer<float3> TBuffer;         // Translations (output)
 RWStructuredBuffer<float4> RBuffer;         // Rotations as quaternions (output)
 RWStructuredBuffer<float> kBuffer;          // Scaling factors (output)
-RWStructuredBuffer<float4> tempBuffer;          // Scaling factors (output)
+RWStructuredBuffer<float3> tempBuffer;          // Scaling factors (output)
 // Combined Gaussian-specific buffer
 struct GaussianData
 {
@@ -65,7 +65,24 @@ float4 quaternion_raw_multiply(float4 a, float4 b)
 
     return float4(ow, ox, oy, oz);
 }
+// Quaternion application
+float3 QuaternionApply(float4 quaternion, float3 points) {
+    float qw = quaternion.x;
+    float qx = quaternion.y;
+    float qy = quaternion.z;
+    float qz = quaternion.w;
 
+    float3 u = float3(qx, qy, qz);
+    float dotUP = dot(u, points); 
+    float dotUU = dot(u, u);
+    float3 crossUP = cross(u, points);
+
+    float3 rotatedPoint = 2.0 * dotUP * u +
+                          (qw * qw - dotUU) * points +
+                          2.0 * qw * crossUP;
+
+    return rotatedPoint;
+}
 // Standardize quaternion to ensure non-negative real part
 float4 standardize_quaternion(float4 q)
 {
@@ -97,9 +114,13 @@ void CalcFacesTransform(uint3 id : SV_DispatchThreadID)
     float3 v0 = VertexBuffer[face.x];
     float3 v1 = VertexBuffer[face.y];
     float3 v2 = VertexBuffer[face.z];
+    // v0.x *= -1;
+    // v1.x *= -1;
+    // v2.x *= -1;
 
     // Calculate translation (T): Mean of vertices
     float3 T = (v0 + v1 + v2) / 3.0f;
+   
     TBuffer[id.x] = T;
 
     // Calculate vectors for face edges
@@ -128,7 +149,7 @@ void CalcFacesTransform(uint3 id : SV_DispatchThreadID)
         v12cross = -v12cross;
     }
     float3 norm = normalize(v12cross);
-    // norm.x *= -1;
+
 
     vec1 = normalize_safe(vec1);
     float3 prod = normalize(cross(vec1, norm));
@@ -157,7 +178,7 @@ void CalcFacesTransform(uint3 id : SV_DispatchThreadID)
     // R = StandardizeQuaternion(R); // Ensure consistent representation
 
     RBuffer[id.x] = R;
-
+    
     // Calculate area and edge lengths for scaling factor (k)
     float area = length(v12cross);
     float vec3_length = length(vec3);
@@ -185,8 +206,8 @@ void MapGaussiansToFaces(uint3 id : SV_DispatchThreadID)
     float3 T = TBuffer[id.x];
     float4 R = RBuffer[id.x];
     float k = kBuffer[id.x];
-    if (R.x < 0)
-        R = - R;
+    // if (R.x < 0)
+    //     R = - R;
     // Normalize rotation and compute rigid rotation
     float3 gOffset = HahaXyzBuffer[id.x]; // gaussian position offset
     float4 gR = normalize(HahaRotationBuffer[id.x]); // gaussian rotation
@@ -196,7 +217,7 @@ void MapGaussiansToFaces(uint3 id : SV_DispatchThreadID)
     GaussianData data;
     float4 rot = quaternion_multiply(R,gR);
 
-
+   
     // rot = normalize(rot);
     // rot.x *= -1;
     // rot.w *= -1;
@@ -207,8 +228,11 @@ void MapGaussiansToFaces(uint3 id : SV_DispatchThreadID)
 
     GaussianDataBuffer[id.x] = data;
 
-    float3 pos = T + rotate_vector(gOffset,R) * k;
+    float3 pos = T +QuaternionApply(R,gOffset) * k;
+
+    tempBuffer[id.x] = QuaternionApply(R,gOffset);
     // pos.x *= -1;
     UpdatedXyzBuffer[id.x] = pos;
-    tempBuffer[id.x ] = rot;
+  
+    
 }

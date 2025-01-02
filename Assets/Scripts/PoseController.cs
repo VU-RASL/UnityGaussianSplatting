@@ -67,7 +67,7 @@ public class PoseController : MonoBehaviour
 
         // Initialize the joints array from the SMPL-X hierarchy
         InitializeJoints();
-        UpdateSMPLXBetas(hahaImporter.data.betas);
+        // UpdateSMPLXBetas(hahaImporter.data.betas);
         // Initialize the GPU vertex buffer
         InitializeVertexBuffer();
 
@@ -77,7 +77,7 @@ public class PoseController : MonoBehaviour
 
         
         // Start the pose animation loop
-        // StartCoroutine(AnimatePose());
+        StartCoroutine(AnimatePose());
         
     }
 
@@ -239,16 +239,25 @@ public class PoseController : MonoBehaviour
 
         // Get the updated vertex positions
         Vector3[] vertices = bakedMesh.vertices;
+        for (int i = 0; i < vertices.Length; i++)
+        {
+            vertices[i].x = -vertices[i].x;
+        }
+        //     // Specify the file path
+        // string filePath = Application.dataPath + "/UnityVertices.txt";
 
-        // Print the first vertex
-        if (vertices.Length > 0)
-        {
-            Debug.Log($"First vertex after update: {vertices[0]}");
-        }
-        else
-        {
-            Debug.LogError("No vertices found in the baked mesh!");
-        }
+        // // Write vertices to the file
+        // using (StreamWriter writer = new StreamWriter(filePath))
+        // {
+        //     foreach (Vector3 vertex in vertices)
+        //     {
+        //         writer.WriteLine($"{vertex.x} {vertex.y} {vertex.z}");
+        //     }
+        // }
+
+        // Debug.Log($"Vertices saved to {filePath}");
+
+
 
         // Upload the vertex positions to the GPU buffer
         if (vertexBuffer != null)
