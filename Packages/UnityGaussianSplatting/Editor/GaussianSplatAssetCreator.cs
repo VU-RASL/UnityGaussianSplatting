@@ -575,6 +575,8 @@ namespace GaussianSplatting.Editor
 
                 // rot
                 var q = splat.rot;
+                // Debug.Log($"Output Data: {index},{q.x}, {q.y}, {q.z}, {q.w}");
+
                 var qq = GaussianUtils.NormalizeSwizzleRotation(new float4(q.x, q.y, q.z, q.w));
                 qq = GaussianUtils.PackSmallest3Rotation(qq);
                 splat.rot = new Quaternion(qq.x, qq.y, qq.z, qq.w);
@@ -866,7 +868,7 @@ namespace GaussianSplatting.Editor
             public GaussianSplatAsset.VectorFormat m_ScaleFormat;
             public int m_FormatSize;
             [NativeDisableParallelForRestriction] public NativeArray<byte> m_Output;
-
+            
             public unsafe void Execute(int index)
             {
                 byte* outputPtr = (byte*) m_Output.GetUnsafePtr() + index * m_FormatSize;
@@ -878,8 +880,9 @@ namespace GaussianSplatting.Editor
                     uint enc = EncodeQuatToNorm10(rot);
                     *(uint*) outputPtr = enc;
                     outputPtr += 4;
+                    // Debug.Log($"Output Data: {rot}");
                 }
-
+                
                 // scale: 6, 4 or 2 bytes
                 EmitEncodedVector(m_Input[index].scale, outputPtr, m_ScaleFormat);
                 outputPtr += GaussianSplatAsset.GetVectorSize(m_ScaleFormat);
@@ -887,6 +890,8 @@ namespace GaussianSplatting.Editor
                 // SH index
                 if (m_SplatSHIndices.IsCreated)
                     *(ushort*) outputPtr = (ushort)m_SplatSHIndices[index];
+                    
+
             }
         }
 
@@ -924,7 +929,12 @@ namespace GaussianSplatting.Editor
             if (splatSHIndices.IsCreated)
                 formatSize += 2;
             int dataLen = inputSplats.Length * formatSize;
-
+            Debug.Log("When creating asserts : ");
+            Debug.Log("formatSize ");
+            Debug.Log(formatSize);
+            Debug.Log("m_FormatScale ");
+            Debug.Log(m_FormatScale);
+            Debug.Log(splatSHIndices);
             dataLen = NextMultipleOf(dataLen, 8); // serialized as ulong
             NativeArray<byte> data = new(dataLen, Allocator.TempJob);
 

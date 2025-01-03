@@ -67,7 +67,7 @@ public class PoseController : MonoBehaviour
 
         // Initialize the joints array from the SMPL-X hierarchy
         InitializeJoints();
-        UpdateSMPLXBetas(hahaImporter.data.betas);
+        // UpdateSMPLXBetas(hahaImporter.data.betas);
         // Initialize the GPU vertex buffer
         InitializeVertexBuffer();
 
@@ -77,7 +77,7 @@ public class PoseController : MonoBehaviour
         
         
         // Start the pose animation loop
-        // StartCoroutine(AnimatePose());
+        StartCoroutine(AnimatePose());
         
     }
 

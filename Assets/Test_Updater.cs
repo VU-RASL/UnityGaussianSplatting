@@ -86,11 +86,11 @@ public class TestShaderWithBuffer : MonoBehaviour
         haha_scalingBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 3);
         haha_scalingBuffer.SetData(haha_scaling);
         // haha_scalingBuffer.GetData()
-        SaveHahaScalingToTxt();
+        // SaveHahaScalingToTxt();
         TBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 3);
         RBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 4);
         kBuffer = new ComputeBuffer(gaussianCount, sizeof(float));
-        tempBuffer = new ComputeBuffer(gaussianCount, sizeof(float) );
+        tempBuffer = new ComputeBuffer(gaussianCount, sizeof(float)*4 );
         GaussianDataBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * (3 + 4 + 1));
         UpdatedXyzBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 3);
         UpdatedScalingBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 3);
@@ -98,7 +98,7 @@ public class TestShaderWithBuffer : MonoBehaviour
         isInitialized = true;
         // SaveVertexBufferAsTxt();
         InitializeComputeShader();
-
+    
     }
 
 void SaveHahaScalingToTxt()
@@ -182,7 +182,7 @@ void SaveHahaScalingToTxt()
         testShader.SetBuffer(calcFacesKernelHandle, "RBuffer", RBuffer);
         testShader.SetBuffer(calcFacesKernelHandle, "kBuffer", kBuffer);
         testShader.SetBuffer(calcFacesKernelHandle,  "GaussianToFaceBuffer", gaussianToFaceBuffer);
-        testShader.SetBuffer(calcFacesKernelHandle, "tempBuffer", tempBuffer);
+        // testShader.SetBuffer(calcFacesKernelHandle, "tempBuffer", tempBuffer);
 
 
 
@@ -197,7 +197,7 @@ void SaveHahaScalingToTxt()
         testShader.SetBuffer(mapGaussiansKernelHandle, "UpdatedXyzBuffer", UpdatedXyzBuffer);
         testShader.SetBuffer(mapGaussiansKernelHandle, "UpdatedScalingBuffer", UpdatedScalingBuffer);
         testShader.SetBuffer(mapGaussiansKernelHandle, "UpdatedRotationBuffer", UpdatedRotationBuffer);
-        // testShader.SetBuffer(mapGaussiansKernelHandle, "tempBuffer", tempBuffer);
+        testShader.SetBuffer(mapGaussiansKernelHandle, "tempBuffer", tempBuffer);
 
         ExecuteShader();
     }
@@ -219,11 +219,11 @@ void SaveHahaScalingToTxt()
         testShader.Dispatch(mapGaussiansKernelHandle, gaussianThreadGroups, 1, 1);
 
         UpdateGaussianRenderer();
-        CreateOtherDataAsset();
-        SaveTBufferToTxt();
+        // CreateOtherDataAsset();
+        // SaveTBufferToTxt();
         // SaveRBufferToTxt();
         // SaveKBufferToTxt();
-        SavetempBufferToTxt();
+        // SavetempBufferToTxt();
         // DebugFaceBuffer();
         // DebugGaussianToFaceBuffer();
     }
@@ -382,7 +382,7 @@ void SavetempBufferToTxt()
     try
     {
         int count = tempBuffer.count; // Get the number of elements
-        float[] data = new float[count]; // Use Vector3 to match float3 in the shader
+        float4[] data = new float4[count]; // Use Vector3 to match float3 in the shader
         tempBuffer.GetData(data); // Fetch data from the buffer
 
         using (StreamWriter writer = new StreamWriter(filePath))
@@ -390,9 +390,9 @@ void SavetempBufferToTxt()
             writer.WriteLine("tempBuffer (v12cross):");
             foreach (var item in data)
             {
-                // writer.WriteLine($"{item.x} {item.y} {item.z} {item.w}"); // Save x, y, z values
+                writer.WriteLine($"{item.x} {item.y} {item.z} {item.w}"); // Save x, y, z values
                 // writer.WriteLine($"{item.x} {item.y} {item.z} ");
-                 writer.WriteLine($"{item}");
+                //  writer.WriteLine($"{item}");
             }
         }
 
@@ -416,77 +416,62 @@ void SavetempBufferToTxt()
             }
         }
         
-        // if (gaussianRenderer != null && GaussianDataBuffer != null)
-        // {
-        //     // Use stride of 32 bytes: 16 (rotation) + 12 (scaling) + 4 (SH index)
-        //     int gaussianCount = GaussianDataBuffer.count;
-        //     if (gaussianCount > 0)
-        //     {
-        //         int requiredBufferSize = gaussianCount * 32;
+        if (gaussianRenderer != null && GaussianDataBuffer != null)
+        {
+            int gaussianCount = GaussianDataBuffer.count;
+        if (gaussianRenderer.m_GpuOtherData != null)
+        {
+            
+            int bufferSize = gaussianCount * 16;
+            // Retrieve the buffer data
+            // Debug.Log(bufferSize);
+            byte[] bufferData = new byte[bufferSize];
+            gaussianRenderer.m_GpuOtherData.GetData(bufferData);
 
-        //         // Check if buffer size matches the required size
-        //         if (gaussianRenderer.m_GpuOtherData == null || gaussianRenderer.m_GpuOtherData.count != gaussianCount)
-        //         {
-        //             // Release existing buffer if needed
-        //             gaussianRenderer.m_GpuOtherData?.Dispose();
+            float4[] UpdatedRotationArray = new float4[gaussianCount];
+        
 
-        //             // Create a GraphicsBuffer with correct size and stride
-        //             gaussianRenderer.m_GpuOtherData = new GraphicsBuffer(GraphicsBuffer.Target.Structured, gaussianCount, 32);
-        //         }
+            UpdatedRotationBuffer.GetData(UpdatedRotationArray);
 
-        //         // Prepare data
-        //         GaussianData[] gaussianDataArray = new GaussianData[gaussianCount];
-        //         GaussianDataBuffer.GetData(gaussianDataArray);
-                
-        //         float3[] data = new float3[gaussianCount];
-        //         UpdatedScalingBuffer.GetData(data);
-        //         string rotationFilePath = "Assets/GaussianAssets/scaling.txt";
-        //         using (StreamWriter writer = new StreamWriter(rotationFilePath))
-        //         {
-        //             writer.WriteLine("In update GPU buffer, scaling:");
-        //             foreach (var item in data)
-        //             {
-        //                 // writer.WriteLine($"{item.x} {item.y} {item.z} {item.w}"); // Save x, y, z values
-        //                 writer.WriteLine($"{item.x} {item.y} {item.z} ");
-        //                 //  writer.WriteLine($"{item}");
-        //             }
-        //         }
+            // Modify the rotation (first 4 bytes of each entry)
+            // string filePath = "Assets/GaussianAssets/qq_output.txt"; // Specify the file path
+            // using (StreamWriter writer = new StreamWriter(filePath)){
+            for (int i = 0; i < gaussianCount; i++)
+            {
+                int offset = i * 16; 
 
+                // New rotation
+                float4 rot =UpdatedRotationArray[i];
+                var q = rot;
+                var qq = GaussianUtils.NormalizeSwizzleRotation(new float4(q.x, q.y, q.z, q.w));
+                qq = GaussianUtils.PackSmallest3Rotation(qq);
+                rot = qq;
 
+                var temp = rot;
+                // writer.WriteLine($"Gaussian {i}:  ({temp.x}, {temp.y}, {temp.z}, {temp.w})");
 
-        //         byte[] newOtherData = new byte[requiredBufferSize];
-        //         for (int i = 0; i < gaussianCount; i++)
-        //         {
-        //             int offset = i * 32;
+                // rot = GaussianUtils.NormalizeSwizzleRotation(rot);
+                // rot = GaussianUtils.PackSmallest3Rotation(rot);
+                // Debug.Log(rot);
+                uint encodedRot = EncodeQuatToNorm10(rot);
 
-        //             float4 rot = gaussianDataArray[i].rotation;
-        //             rot = GaussianUtils.NormalizeSwizzleRotation(rot);
-        //             rot = GaussianUtils.PackSmallest3Rotation(rot);
+                // Update the first 4 bytes
+                Buffer.BlockCopy(BitConverter.GetBytes(encodedRot), 0, bufferData, offset, 4);
+            }
+            
+            // Write the updated data back to the buffer
+            gaussianRenderer.m_GpuOtherData.SetData(bufferData);
 
-        //             float3 scale = data[i];
-        //             // scale = GaussianUtils.LinearScale(scale);
-                    
-
-        //             // Copy rotation (Vector4 - 16 bytes)
-        //             Buffer.BlockCopy(BitConverter.GetBytes(rot.x), 0, newOtherData, offset, 4);
-        //             Buffer.BlockCopy(BitConverter.GetBytes(rot.y), 0, newOtherData, offset + 4, 4);
-        //             Buffer.BlockCopy(BitConverter.GetBytes(rot.z), 0, newOtherData, offset + 8, 4);
-        //             Buffer.BlockCopy(BitConverter.GetBytes(rot.w), 0, newOtherData, offset + 12, 4);
-
-        //             // Copy scaling (Vector3 - 12 bytes)
-        //             Buffer.BlockCopy(BitConverter.GetBytes(scale.x), 0, newOtherData, offset + 16, 4);
-        //             Buffer.BlockCopy(BitConverter.GetBytes(scale.y), 0, newOtherData, offset + 20, 4);
-        //             Buffer.BlockCopy(BitConverter.GetBytes(scale.z), 0, newOtherData, offset + 24, 4);
-
-        //             // SH index (set as 0 for now, 4 bytes)
-        //             Buffer.BlockCopy(BitConverter.GetBytes(0), 0, newOtherData, offset + 28, 4);
-        //         }
-
-        //         // Update the GraphicsBuffer with the new data
-        //         gaussianRenderer.m_GpuOtherData.SetData(newOtherData);
-        //     }
-        // }
+            Debug.Log("Updated only the rotation in m_GpuOtherData.");
+        }
+        }
     }
+
+
+    static uint EncodeQuatToNorm10(float4 v) // 32 bits: 10.10.10.2
+        {
+            return (uint) (v.x * 1023.5f) | ((uint) (v.y * 1023.5f) << 10) | ((uint) (v.z * 1023.5f) << 20) | ((uint) (v.w * 3.5f) << 30);
+        }
 
     void CreateOtherDataAsset()
 {
@@ -575,7 +560,7 @@ void SavetempBufferToTxt()
 
 
 
-            string pathOther = "Assets/GaussianAssets/test_oth.bytes";
+            string pathOther = "Assets/GaussianAssets/test1_oth.bytes";
             if (string.IsNullOrEmpty(pathOther))
             {
                 Debug.LogError("PathOther is not set in GaussianSplatAssetCreator!");
