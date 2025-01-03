@@ -33,8 +33,15 @@ public class PoseController : MonoBehaviour
         
         smplx.Awake();
         // Debug.Log(hahaImporter.data.betas);
+        
+
+        for (int i = 0; i < SMPLX.NUM_BETAS; i++)
+        {
+            smplx.betas[i] = hahaImporter.data.betas[i];
+        }
         smplx.ResetBodyPose();
-         
+        smplx.SetBetaShapes();
+
         Debug.Log("ResetTPose");
 
 

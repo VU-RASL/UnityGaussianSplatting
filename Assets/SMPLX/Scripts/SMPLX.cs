@@ -213,8 +213,20 @@ public class SMPLX : MonoBehaviour
             if (betas[i] != 0.0f)
                 _defaultShape = false;
         }
-
-        UpdateJointPositions();
+        
+        // if (_jointRotations == null)
+        // {
+        //     Debug.Log("Null");
+        //     _jointRotations = new Quaternion[NUM_JOINTS];
+        // }
+        _jointRotations = new Quaternion[55];
+        _jointPositions = new Vector3[NUM_JOINTS];
+            for (int i=0; i< NUM_JOINTS; i++)
+            {
+                Transform joint = _transformFromName[_bodyJointNames[i]];
+                _jointPositions[i] = joint.position;
+            }
+        UpdateJointPositions(true);
     }
 
     public void SetExpressions()
@@ -333,10 +345,15 @@ public class SMPLX : MonoBehaviour
             Transform joint = _transformFromName[name];
             joint.localRotation = Quaternion.identity;
         }
-  
+        if (_jointRotations == null)
+        {
+            _jointRotations = new Quaternion[NUM_JOINTS];
+        } 
         UpdateJointPositions(true);
+        // Debug.Log("Computing betas shape");
+        // SetBetaShapes();
     }
-
+ 
     public void SetBodyPose(BodyPose pose)
     {
         if (pose == BodyPose.T)
@@ -428,6 +445,7 @@ public class SMPLX : MonoBehaviour
 
     public bool UpdateJointPositions(bool recalculateJoints = true)
     {
+
         if (HasBetaShapes() && recalculateJoints)
         {
             if (_sharedMeshDefault == null)
@@ -506,6 +524,7 @@ public class SMPLX : MonoBehaviour
             // Restore pose
             for (int i=0; i<NUM_JOINTS; i++)
             {
+                
                 Transform joint = _transformFromName[_bodyJointNames[i]];
                 joint.localRotation = _jointRotations[i];
 
