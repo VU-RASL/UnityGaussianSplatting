@@ -462,7 +462,7 @@ void SavetempBufferToTxt()
             // Write the updated data back to the buffer
             gaussianRenderer.m_GpuOtherData.SetData(bufferData);
 
-            Debug.Log("Updated only the rotation in m_GpuOtherData.");
+            // Debug.Log("Updated only the rotation in m_GpuOtherData.");
         }
         }
     }

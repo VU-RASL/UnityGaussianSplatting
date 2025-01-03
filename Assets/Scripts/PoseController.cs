@@ -31,10 +31,10 @@ public class PoseController : MonoBehaviour
     void Awake()
     {
         
-        
+        smplx.Awake();
         // Debug.Log(hahaImporter.data.betas);
         smplx.ResetBodyPose();
-        
+         
         Debug.Log("ResetTPose");
 
 
@@ -42,6 +42,7 @@ public class PoseController : MonoBehaviour
 
     void Start()
     {
+        
         // Validate the SMPL-X reference
         if (smplx == null)
         {
@@ -263,7 +264,7 @@ public class PoseController : MonoBehaviour
         if (vertexBuffer != null)
         {
             vertexBuffer.SetData(vertices);
-            Debug.Log("Uploaded new vertex positions to GPU.");
+            // Debug.Log("Uploaded new vertex positions to GPU.");
         }
         else
         {

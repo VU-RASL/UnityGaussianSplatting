@@ -333,8 +333,8 @@ public class SMPLX : MonoBehaviour
             Transform joint = _transformFromName[name];
             joint.localRotation = Quaternion.identity;
         }
-
-        UpdateJointPositions(false);
+  
+        UpdateJointPositions(true);
     }
 
     public void SetBodyPose(BodyPose pose)
@@ -363,7 +363,7 @@ public class SMPLX : MonoBehaviour
             SetLocalJointRotation("left_knee", Quaternion.Euler(30.0f, 30.0f, 0.0f));
         }
         UpdatePoseCorrectives();
-        UpdateJointPositions(false);
+        UpdateJointPositions(true);
     }
 
     public void EnablePoseCorrectives(bool enabled)
