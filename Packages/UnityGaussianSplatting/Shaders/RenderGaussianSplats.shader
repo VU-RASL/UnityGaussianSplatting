@@ -8,6 +8,7 @@ Shader "Gaussian Splatting/Render Splats"
         Pass
         {
             ZWrite Off
+		
             Blend OneMinusDstAlpha One
             Cull Off
             
@@ -79,6 +80,7 @@ half4 frag (v2f i) : SV_Target
 {
 	float power = -dot(i.pos, i.pos);
 	half alpha = exp(power);
+	
 	if (i.col.a >= 0)
 	{
 		alpha = saturate(alpha * i.col.a);

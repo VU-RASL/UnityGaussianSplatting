@@ -74,10 +74,10 @@ public class PoseController : MonoBehaviour
         smplx.SetBodyPose(SMPLX.BodyPose.T);
         UpdateVertexBuffer();
         // GetBuffers();
-
+        
         
         // Start the pose animation loop
-        StartCoroutine(AnimatePose());
+        // StartCoroutine(AnimatePose());
         
     }
 

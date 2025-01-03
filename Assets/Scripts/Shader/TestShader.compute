@@ -16,7 +16,7 @@ StructuredBuffer<float3> HahaScalingBuffer;  // Original Gaussian scaling
 RWStructuredBuffer<float3> TBuffer;         // Translations (output)
 RWStructuredBuffer<float4> RBuffer;         // Rotations as quaternions (output)
 RWStructuredBuffer<float> kBuffer;          // Scaling factors (output)
-RWStructuredBuffer<float3> tempBuffer;          // Scaling factors (output)
+RWStructuredBuffer<float> tempBuffer;          // Scaling factors (output)
 // Combined Gaussian-specific buffer
 struct GaussianData
 {
@@ -27,6 +27,8 @@ struct GaussianData
 RWStructuredBuffer<GaussianData> GaussianDataBuffer; // Combined buffer
 
 RWStructuredBuffer<float3> UpdatedXyzBuffer;    // Updated Gaussian positions
+RWStructuredBuffer<float3> UpdatedScalingBuffer;    // Updated Gaussian scaling
+RWStructuredBuffer<float4> UpdatedRotationBuffer;    // Updated Gaussian rotation
 
 // Constants
 #define MAX_SCALE 0.05f
@@ -92,7 +94,112 @@ float4 standardize_quaternion(float4 q)
     }
     return q;
 }
+float3x3 Quaternion_WxyzToMatrix(float4 q)
+{
+    // Interpret q as (w, x, y, z):
+    float w = q.x;
+    float x = q.y;
+    float y = q.z;
+    float z = q.w;
 
+    // Precompute products
+    float xx = x * x;
+    float yy = y * y;
+    float zz = z * z;
+    float xy = x * y;
+    float xz = x * z;
+    float yz = y * z;
+    float wx = w * x;
+    float wy = w * y;
+    float wz = w * z;
+
+    // Build a rotation matrix in row-major form
+    float3x3 M;
+
+    // Row 0
+    M[0][0] = 1.0f - 2.0f * (yy + zz);
+    M[0][1] = 2.0f * (xy - wz);
+    M[0][2] = 2.0f * (xz + wy);
+
+    // Row 1
+    M[1][0] = 2.0f * (xy + wz);
+    M[1][1] = 1.0f - 2.0f * (xx + zz);
+    M[1][2] = 2.0f * (yz - wx);
+
+    // Row 2
+    M[2][0] = 2.0f * (xz - wy);
+    M[2][1] = 2.0f * (yz + wx);
+    M[2][2] = 1.0f - 2.0f * (xx + yy);
+
+    return M;
+}
+
+float4 MatrixToQuaternion_Wxyz(float3x3 M)
+{
+    // We'll return q=(w, x, y, z)
+    float4 q;
+    
+    // Trace = sum of diagonal elements
+    float trace = M[0][0] + M[1][1] + M[2][2];
+
+    if (trace > 0.0f)
+    {
+        // S = 2*w
+        float s  = sqrt(trace + 1.0f);
+        float w  = 0.5f * s;
+        s        = 0.5f / w; // = 1 / (2*w)
+
+        float x  = (M[2][1] - M[1][2]) * s;
+        float y  = (M[0][2] - M[2][0]) * s;
+        float z  = (M[1][0] - M[0][1]) * s;
+
+        q = float4(w, x, y, z);
+    }
+    else
+    {
+        // Find which major diagonal element is largest
+        if (M[0][0] > M[1][1] && M[0][0] > M[2][2])
+        {
+            float s  = sqrt(1.0f + M[0][0] - M[1][1] - M[2][2]);
+            float x  = 0.5f * s;
+            s        = 0.5f / x;
+
+            float w  = (M[2][1] - M[1][2]) * s;
+            float y  = (M[0][1] + M[1][0]) * s;
+            float z  = (M[2][0] + M[0][2]) * s;
+
+            q = float4(w, x, y, z);
+        }
+        else if (M[1][1] > M[2][2])
+        {
+            float s  = sqrt(1.0f + M[1][1] - M[0][0] - M[2][2]);
+            float y  = 0.5f * s;
+            s        = 0.5f / y;
+
+            float w  = (M[0][2] - M[2][0]) * s;
+            float x  = (M[0][1] + M[1][0]) * s;
+            float z  = (M[1][2] + M[2][1]) * s;
+
+            q = float4(w, x, y, z);
+        }
+        else
+        {
+            float s  = sqrt(1.0f + M[2][2] - M[0][0] - M[1][1]);
+            float z  = 0.5f * s;
+            s        = 0.5f / z;
+
+            float w  = (M[1][0] - M[0][1]) * s;
+            float x  = (M[0][2] + M[2][0]) * s;
+            float y  = (M[1][2] + M[2][1]) * s;
+
+            q = float4(w, x, y, z);
+        }
+    }
+
+    // Normalize the quaternion to guard against floating precision drift
+    q = normalize(q);
+    return q;
+}
 // Quaternion multiplication with standardization
 float4 quaternion_multiply(float4 a, float4 b)
 {
@@ -184,6 +291,8 @@ void CalcFacesTransform(uint3 id : SV_DispatchThreadID)
     float vec3_length = length(vec3);
     float h = area / vec3_length;
     // tempBuffer[id.x] = h + vec3_length;
+    
+    tempBuffer[id.x] = area ;
     float k = (h + vec3_length) * 0.5 / MAX_SCALE;
         
     kBuffer[id.x] = k;
@@ -215,24 +324,22 @@ void MapGaussiansToFaces(uint3 id : SV_DispatchThreadID)
 
     // Compute and write to buffers
     GaussianData data;
-    float4 rot = quaternion_multiply(R,gR);
 
-   
-    // rot = normalize(rot);
-    // rot.x *= -1;
-    // rot.w *= -1;
+    // Apply mirroring to rotation
+    float4 rot = quaternion_multiply(R, gR);
+    rot.x *= -1;
+    rot.y *= -1;
     data.rotation = rot;
-    data.scaling = s_act(gS) * k ;
-    // float3 tem = s_act(gS);
-   
+    data.scaling = s_act(gS) * k;
 
-    GaussianDataBuffer[id.x] = data;
+    // Apply mirroring to position
+    float3 pos = T + QuaternionApply(R, gOffset) * k;
+    pos.x *= -1; // Mirror position along x-axis
 
-    float3 pos = T +QuaternionApply(R,gOffset) * k;
-
-    tempBuffer[id.x] = QuaternionApply(R,gOffset);
-    // pos.x *= -1;
+    // tempBuffer[id.x] =k ;
+    UpdatedScalingBuffer[id.x] =  data.scaling;
     UpdatedXyzBuffer[id.x] = pos;
-  
+    UpdatedRotationBuffer[id.x] = rot;
+    GaussianDataBuffer[id.x] = data;
     
 }

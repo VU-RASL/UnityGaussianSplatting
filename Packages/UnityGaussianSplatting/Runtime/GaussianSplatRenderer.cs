@@ -216,6 +216,7 @@ namespace GaussianSplatting.Runtime
     {
         //  Updated Code for renderring
         public GraphicsBuffer updatedPositionsBuffer;
+        public GraphicsBuffer updatedOtherBuffer;
         public void SetUpdatedPositionsBuffer(GraphicsBuffer buffer)
         {
             updatedPositionsBuffer = buffer;
