@@ -241,6 +241,7 @@ void CSCalcViewData (uint3 id : SV_DispatchThreadID)
         half4 col;
         col.rgb = ShadeSH(splat.sh, objViewDir, _SHOrder, _SHOnly != 0);
         col.a = min(splat.opacity * opacityScale, 65000);
+        // col.a = splat.opacity;
         col.rgb = ShadeSH(splat.sh, objViewDir, _SHOrder, false);
         col.rgb = splat.sh.col;
         col.rgb = saturate(col.rgb);
