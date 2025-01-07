@@ -10,6 +10,8 @@ using System.IO;
 
 public class TestShaderWithBuffer : MonoBehaviour
 {
+    public Transform debug;
+
     public ComputeShader testShader;
     public HahaImporter hahaImporter;
     private GaussianSplatAssetCreator assetCreator; // Reference to GaussianSplatAssetCreator
@@ -220,7 +222,7 @@ void SaveHahaScalingToTxt()
 
         UpdateGaussianRenderer();
         // CreateOtherDataAsset();
-        // SaveTBufferToTxt();
+        SaveTBufferToTxt();
         // SaveRBufferToTxt();
         // SaveKBufferToTxt();
         // SavetempBufferToTxt();
@@ -264,6 +266,9 @@ void SaveTBufferToTxt()
         int count = TBuffer.count;
         Vector3[] data = new Vector3[count];
         TBuffer.GetData(data); // Fetch actual buffer data
+        Vector3 pos = data[0];
+        pos.x *= -1;
+        debug.transform.position = pos;
 
         using (StreamWriter writer = new StreamWriter(filePath))
         {

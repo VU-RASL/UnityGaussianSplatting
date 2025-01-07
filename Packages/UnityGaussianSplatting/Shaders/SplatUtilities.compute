@@ -42,6 +42,7 @@ int _SelectionMode;
 
 RWStructuredBuffer<uint> _SplatSortDistances;
 RWStructuredBuffer<uint> _SplatSortKeys;
+StructuredBuffer<vector> _TBuffer;
 uint _SplatCount;
 
 // radix sort etc. friendly, see http://stereopsis.com/radix.html
@@ -193,10 +194,16 @@ void CSCalcViewData (uint3 id : SV_DispatchThreadID)
     SplatData splat = LoadSplatData(idx);
     SplatViewData view = (SplatViewData)0;
     
+    float3 faceWorldPos = _TBuffer[idx];
+    float4 faceClipPos = mul(_MatrixVP, float4(faceWorldPos, 1));
+    
+
     float3 centerWorldPos = mul(_MatrixObjectToWorld, float4(splat.pos,1)).xyz;
     float4 centerClipPos = mul(_MatrixVP, float4(centerWorldPos, 1));
     half opacityScale = _SplatOpacityScale;
     float splatScale = _SplatScale;
+
+    
 
     // deleted?
     if (_SplatBitsValid)
@@ -241,6 +248,12 @@ void CSCalcViewData (uint3 id : SV_DispatchThreadID)
         half4 col;
         col.rgb = ShadeSH(splat.sh, objViewDir, _SHOrder, _SHOnly != 0);
         col.a = min(splat.opacity * opacityScale, 65000);
+
+        if (centerClipPos.z < faceClipPos.z)
+        {
+            col.a = 0;
+        }
+
         // col.a = splat.opacity;
         col.rgb = ShadeSH(splat.sh, objViewDir, _SHOrder, false);
         col.rgb = splat.sh.col;

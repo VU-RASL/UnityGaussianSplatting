@@ -142,9 +142,9 @@ namespace GaussianSplatting.Runtime
                 
                 mpb.SetBuffer("_RECORD",gs.m_recordBuffer);
             
+                       
                 gs.m_TBuffer.SetData(gs.T);
-                mpb.SetBuffer("_TBuffer",gs.m_TBuffer);        
-
+                mpb.SetBuffer("_TBuffer",gs.m_TBuffer); 
 
 
                 gs.SetAssetDataOnMaterial(mpb);
@@ -626,7 +626,10 @@ namespace GaussianSplatting.Runtime
 
             // calculate view dependent data for each splat
             SetAssetDataOnCS(cmb, KernelIndices.CalcViewData);
+            
 
+            cmb.SetComputeBufferParam(m_CSSplatUtilities,(int)KernelIndices.CalcViewData, "_TBuffer", m_TBuffer);
+            
             cmb.SetComputeMatrixParam(m_CSSplatUtilities, Props.MatrixVP, matProj * matView);
             cmb.SetComputeMatrixParam(m_CSSplatUtilities, Props.MatrixMV, matView * matO2W);
             cmb.SetComputeMatrixParam(m_CSSplatUtilities, Props.MatrixP, matProj);

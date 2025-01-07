@@ -5,7 +5,10 @@ using Unity.Mathematics;
 
 // [ExecuteInEditMode]
 public class PoseController : MonoBehaviour
-{
+{   
+    public Transform debug;
+
+
     [SerializeField] public SMPLX smplx; // Reference to the SMPL-X model
     public float poseSwitchTime = 3f;   // Time in seconds to switch poses
     // public Material smplxMaterial;     // Assign the material with your custom shader
@@ -250,6 +253,8 @@ public class PoseController : MonoBehaviour
         Vector3[] vertices = bakedMesh.vertices;
         for (int i = 0; i < vertices.Length; i++)
         {
+            // vertices[i] += smr.gameObject.transform.position; 
+            vertices[i] += debug.position; 
             vertices[i].x = -vertices[i].x;
         }
         //     // Specify the file path
@@ -266,8 +271,7 @@ public class PoseController : MonoBehaviour
 
         // Debug.Log($"Vertices saved to {filePath}");
 
-
-
+        
         // Upload the vertex positions to the GPU buffer
         if (vertexBuffer != null)
         {

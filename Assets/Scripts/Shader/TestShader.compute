@@ -336,7 +336,8 @@ void MapGaussiansToFaces(uint3 id : SV_DispatchThreadID)
     data.scaling = s_act(gS) * k;
 
     // Apply mirroring to position
-    float3 pos = T + QuaternionApply(R, gOffset) * k;
+    // float3 pos = T + QuaternionApply(R, gOffset) * k;
+    float3 pos = T;
     pos.x *= -1; // Mirror position along x-axis
 
     UpdatedScalingBuffer[id.x] =  data.scaling;

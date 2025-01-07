@@ -56,6 +56,19 @@ v2f vert (uint vtxID : SV_VertexID, uint instID : SV_InstanceID)
 		o.col.b = f16tof32(view.color.y >> 16);
 		o.col.a = f16tof32(view.color.y);
 
+		// float3 T = _TBuffer[instID];
+		
+		// float4 face_camSpace = mul(UNITY_MATRIX_MV, float4(T,0));
+		
+		// float gs_depth = centerClipPos.z;
+		// float face_depth = face_camSpace.z;
+
+
+		// if (gs_depth < face_depth)
+		// {
+		// 	o.col.a = 0;
+		// }
+
 		uint idx = vtxID;
 		float2 quadPos = float2(idx&1, (idx>>1)&1) * 2.0 - 1.0;
 		quadPos *= 2;
@@ -65,6 +78,9 @@ v2f vert (uint vtxID : SV_VertexID, uint instID : SV_InstanceID)
 		float2 deltaScreenPos = (quadPos.x * view.axis1 + quadPos.y * view.axis2) * 2 / _ScreenParams.xy;
 		o.vertex = centerClipPos;
 		o.vertex.xy += deltaScreenPos * centerClipPos.w;
+
+
+
 
 		// is this splat selected?
 		if (_SplatBitsValid)
@@ -77,37 +93,7 @@ v2f vert (uint vtxID : SV_VertexID, uint instID : SV_InstanceID)
 				o.col.a = -1;				
 			}
 		}
-	}
-
-
-
-
-// UNITY_MATRIX_M: The model matrix transforms from local space to world space.
-// UNITY_MATRIX_V: The view matrix transforms from world space to camera space.
-// UNITY_MATRIX_MV: The combined model-view matrix transforms directly from local space to camera space.
-    float3 T = _TBuffer[instID];
-    // _RECORD[instID] = T;
-    float4 gs_camSpace= mul(UNITY_MATRIX_MV, o.vertex);
-    float4 face_camSpace = mul(UNITY_MATRIX_MV, T);
-    // Extract the depth (z-component)
-    float gs_depth = gs_camSpace.z;
-    float face_depth = face_camSpace.z;
-
-    // if (T.z == 0.0 && T.x == 0.0 && T.y == 0.0 )  
-    // {
-    //     o.col.a = 0;
-    // }
-
-    if (gs_depth < face_depth)
-    {
-        o.col.a = 0;
-    }
-       
-
-
-
-
-
+	} 
     return o;
 }
 
