@@ -27,7 +27,7 @@ public class TestShaderWithBuffer : MonoBehaviour
     private ComputeBuffer haha_scalingBuffer;
     private ComputeBuffer vertexBuffer;
     private ComputeBuffer faceBuffer;
-    private ComputeBuffer TBuffer;
+    public ComputeBuffer TBuffer;
     private ComputeBuffer RBuffer;
     private ComputeBuffer kBuffer;
     private ComputeBuffer tempBuffer;
@@ -90,7 +90,7 @@ public class TestShaderWithBuffer : MonoBehaviour
         TBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 3);
         RBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 4);
         kBuffer = new ComputeBuffer(gaussianCount, sizeof(float));
-        tempBuffer = new ComputeBuffer(gaussianCount, sizeof(float)*4 );
+        tempBuffer = new ComputeBuffer(gaussianCount, sizeof(float) );
         GaussianDataBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * (3 + 4 + 1));
         UpdatedXyzBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 3);
         UpdatedScalingBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 3);
@@ -267,7 +267,6 @@ void SaveTBufferToTxt()
 
         using (StreamWriter writer = new StreamWriter(filePath))
         {
-            writer.WriteLine("TBuffer (Translation Vectors):");
             foreach (var item in data)
             {
                 writer.WriteLine($"{item.x} {item.y} {item.z}"); // Write x, y, z for each row
@@ -382,7 +381,7 @@ void SavetempBufferToTxt()
     try
     {
         int count = tempBuffer.count; // Get the number of elements
-        float4[] data = new float4[count]; // Use Vector3 to match float3 in the shader
+        float[] data = new float[count]; // Use Vector3 to match float3 in the shader
         tempBuffer.GetData(data); // Fetch data from the buffer
 
         using (StreamWriter writer = new StreamWriter(filePath))
@@ -390,9 +389,9 @@ void SavetempBufferToTxt()
             writer.WriteLine("tempBuffer (v12cross):");
             foreach (var item in data)
             {
-                writer.WriteLine($"{item.x} {item.y} {item.z} {item.w}"); // Save x, y, z values
+                // writer.WriteLine($"{item.x} {item.y} {item.z}"); // Save x, y, z values
                 // writer.WriteLine($"{item.x} {item.y} {item.z} ");
-                //  writer.WriteLine($"{item}");
+                 writer.WriteLine($"{item}");
             }
         }
 
@@ -413,6 +412,11 @@ void SavetempBufferToTxt()
                 Vector3[] updatedPositions = new Vector3[updatedCount];
                 UpdatedXyzBuffer.GetData(updatedPositions);
                 gaussianRenderer.m_GpuPosData.SetData(updatedPositions);
+
+                Vector3[] updatedT = new Vector3[updatedCount];
+                TBuffer.GetData(updatedT);
+                // gaussianRenderer.m_TData.SetData(updatedT);
+                gaussianRenderer.T = updatedT;
             }
         }
         
@@ -577,7 +581,10 @@ void SavetempBufferToTxt()
     }
 }
 
-
+    public ComputeBuffer GetTBuffer()
+    {
+        return TBuffer;
+    }
 
 
 

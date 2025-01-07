@@ -245,6 +245,7 @@ public class PoseController : MonoBehaviour
         Mesh bakedMesh = new Mesh();
         smr.BakeMesh(bakedMesh);
 
+
         // Get the updated vertex positions
         Vector3[] vertices = bakedMesh.vertices;
         for (int i = 0; i < vertices.Length; i++)

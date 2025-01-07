@@ -2,6 +2,7 @@
 #pragma kernel CalcFacesTransform
 #pragma kernel MapGaussiansToFaces
 
+
 // Constants for scaling activation
 #define MIN_S_VALUE 0.0f
 #define MAX_S_VALUE 0.1f
@@ -16,7 +17,7 @@ StructuredBuffer<float3> HahaScalingBuffer;  // Original Gaussian scaling
 RWStructuredBuffer<float3> TBuffer;         // Translations (output)
 RWStructuredBuffer<float4> RBuffer;         // Rotations as quaternions (output)
 RWStructuredBuffer<float> kBuffer;          // Scaling factors (output)
-RWStructuredBuffer<float4> tempBuffer;          // Scaling factors (output)
+RWStructuredBuffer<float> tempBuffer;          // Scaling factors (output)
 // Combined Gaussian-specific buffer
 struct GaussianData
 {
@@ -338,10 +339,18 @@ void MapGaussiansToFaces(uint3 id : SV_DispatchThreadID)
     float3 pos = T + QuaternionApply(R, gOffset) * k;
     pos.x *= -1; // Mirror position along x-axis
 
-    tempBuffer[id.x] =rot ;
     UpdatedScalingBuffer[id.x] =  data.scaling;
     UpdatedXyzBuffer[id.x] = pos;
     UpdatedRotationBuffer[id.x] = rot;
     GaussianDataBuffer[id.x] = data;
+
+    
+
+
+
+       
+    tempBuffer[id.x] =k ;
+
+
     
 }

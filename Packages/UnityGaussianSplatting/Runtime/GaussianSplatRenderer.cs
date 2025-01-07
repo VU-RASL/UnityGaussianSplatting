@@ -10,9 +10,10 @@ using Unity.Profiling.LowLevel;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
-
+using System.IO;
 namespace GaussianSplatting.Runtime
 {
+    
     class GaussianSplatRenderSystem
     {
         // ReSharper disable MemberCanBePrivate.Global - used by HDRP/URP features that are not always compiled
@@ -78,6 +79,7 @@ namespace GaussianSplatting.Runtime
             foreach (var kvp in m_Splats)
             {
                 var gs = kvp.Key;
+                // Debug.Log(gs);
                 if (gs == null || !gs.isActiveAndEnabled || !gs.HasValidAsset || !gs.HasValidRenderSetup)
                     continue;
                 m_ActiveSplats.Add((kvp.Key, kvp.Value));
@@ -102,6 +104,7 @@ namespace GaussianSplatting.Runtime
         // ReSharper disable once MemberCanBePrivate.Global - used by HDRP/URP features that are not always compiled
         public Material SortAndRenderSplats(Camera cam, CommandBuffer cmb)
         {
+
             Material matComposite = null;
             foreach (var kvp in m_ActiveSplats)
             {
@@ -136,6 +139,14 @@ namespace GaussianSplatting.Runtime
                 {
                     mpb.SetBuffer("_SplatPos", gs.m_GpuPosData);
                 }
+                
+                mpb.SetBuffer("_RECORD",gs.m_recordBuffer);
+            
+                gs.m_TBuffer.SetData(gs.T);
+                mpb.SetBuffer("_TBuffer",gs.m_TBuffer);        
+
+
+
                 gs.SetAssetDataOnMaterial(mpb);
                 mpb.SetBuffer(GaussianSplatRenderer.Props.SplatChunks, gs.m_GpuChunks);
 
@@ -167,6 +178,9 @@ namespace GaussianSplatting.Runtime
 
                 cmb.BeginSample(s_ProfDraw);
                 cmb.DrawProcedural(gs.m_GpuIndexBuffer, matrix, displayMat, 0, topology, indexCount, instanceCount, mpb);
+
+
+
                 cmb.EndSample(s_ProfDraw);
             }
             return matComposite;
@@ -217,6 +231,7 @@ namespace GaussianSplatting.Runtime
         //  Updated Code for renderring
         public GraphicsBuffer updatedPositionsBuffer;
         public GraphicsBuffer updatedOtherBuffer;
+        public GraphicsBuffer TBuffer;
         public void SetUpdatedPositionsBuffer(GraphicsBuffer buffer)
         {
             updatedPositionsBuffer = buffer;
@@ -269,6 +284,9 @@ namespace GaussianSplatting.Runtime
         GraphicsBuffer m_GpuSortDistances;
         internal GraphicsBuffer m_GpuSortKeys;
         public GraphicsBuffer m_GpuPosData;
+        public ComputeBuffer m_TBuffer;
+        public GraphicsBuffer m_recordBuffer;
+        public Vector3[] T;
         public GraphicsBuffer m_GpuOtherData;
         public GraphicsBuffer m_GpuSHData;
         public Texture m_GpuColorData;
@@ -344,6 +362,9 @@ namespace GaussianSplatting.Runtime
             public static readonly int SelectionMode = Shader.PropertyToID("_SelectionMode");
             public static readonly int SplatPosMouseDown = Shader.PropertyToID("_SplatPosMouseDown");
             public static readonly int SplatOtherMouseDown = Shader.PropertyToID("_SplatOtherMouseDown");
+
+            public static readonly int FaceCentroid = Shader.PropertyToID("_TBuffer");
+            public static readonly int RECORD = Shader.PropertyToID("_RECORD");
         }
 
         [field: NonSerialized] public bool editModified { get; private set; }
@@ -434,6 +455,17 @@ namespace GaussianSplatting.Runtime
             });
 
             InitSortBuffers(splatCount);
+
+
+            m_TBuffer = new ComputeBuffer(splatCount, sizeof(float) * 3);
+
+            T = new Vector3[splatCount];
+            m_TBuffer.SetData(T);
+
+
+            m_recordBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.CopySource, (int) (asset.posData.dataSize / 4), 4) { name = "GaussianPosData" };
+
+            m_recordBuffer.SetData(T);
         }
 
         void InitSortBuffers(int count)
