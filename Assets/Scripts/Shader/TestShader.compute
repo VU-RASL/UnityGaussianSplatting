@@ -328,7 +328,6 @@ void MapGaussiansToFaces(uint3 id : SV_DispatchThreadID)
 
     // Apply mirroring to rotation
     float4 rot = quaternion_multiply(R, gR);
-
     
     rot.x *= -1;
     rot.y *= -1;
@@ -336,9 +335,10 @@ void MapGaussiansToFaces(uint3 id : SV_DispatchThreadID)
     data.scaling = s_act(gS) * k;
 
     // Apply mirroring to position
-    // float3 pos = T + QuaternionApply(R, gOffset) * k;
-    float3 pos = T;
+    float3 pos = T + QuaternionApply(R, gOffset) * k;
+    // float3 pos = T;
     pos.x *= -1; // Mirror position along x-axis
+    TBuffer[id.x] = pos;
 
     UpdatedScalingBuffer[id.x] =  data.scaling;
     UpdatedXyzBuffer[id.x] = pos;

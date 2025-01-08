@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-
 using System;
 using System.Collections.Generic;
 using Unity.Collections;
@@ -11,6 +10,7 @@ using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using System.IO;
+
 namespace GaussianSplatting.Runtime
 {
     
@@ -144,6 +144,7 @@ namespace GaussianSplatting.Runtime
             
                        
                 gs.m_TBuffer.SetData(gs.T);
+                // Debug.Log(gs.T[0]);
                 mpb.SetBuffer("_TBuffer",gs.m_TBuffer); 
 
 

@@ -42,7 +42,7 @@ int _SelectionMode;
 
 RWStructuredBuffer<uint> _SplatSortDistances;
 RWStructuredBuffer<uint> _SplatSortKeys;
-StructuredBuffer<vector> _TBuffer;
+StructuredBuffer<float3> _TBuffer;
 uint _SplatCount;
 
 // radix sort etc. friendly, see http://stereopsis.com/radix.html
@@ -194,7 +194,8 @@ void CSCalcViewData (uint3 id : SV_DispatchThreadID)
     SplatData splat = LoadSplatData(idx);
     SplatViewData view = (SplatViewData)0;
     
-    float3 faceWorldPos = _TBuffer[idx];
+    float4 faceObjPos = float4(_TBuffer[idx],1);
+    float3 faceWorldPos =  mul(_MatrixObjectToWorld, faceObjPos).xyz;
     float4 faceClipPos = mul(_MatrixVP, float4(faceWorldPos, 1));
     
 

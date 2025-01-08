@@ -254,7 +254,7 @@ public class PoseController : MonoBehaviour
         for (int i = 0; i < vertices.Length; i++)
         {
             // vertices[i] += smr.gameObject.transform.position; 
-            vertices[i] += debug.position; 
+            // vertices[i] += debug.position; 
             vertices[i].x = -vertices[i].x;
         }
         //     // Specify the file path

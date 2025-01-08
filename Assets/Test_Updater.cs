@@ -19,9 +19,8 @@ public class TestShaderWithBuffer : MonoBehaviour
     private NativeArray<int> splatSHIndices;
 
     public PoseController poseController;
-    [SerializeField] private GameObject gaussianSplatsObject;
-    private GaussianSplatRenderer gaussianRenderer;
-
+    [SerializeField] private GaussianSplatRenderer gaussianRenderer;
+    
     // GPU Buffers
     private ComputeBuffer gaussianToFaceBuffer;
     private ComputeBuffer haha_xyzBuffer;
@@ -55,7 +54,6 @@ public class TestShaderWithBuffer : MonoBehaviour
             return;
         }
 
-        gaussianRenderer = gaussianSplatsObject.GetComponent<GaussianSplatRenderer>();
         assetCreator = new GaussianSplatAssetCreator();
 
         if (gaussianRenderer == null)
@@ -222,7 +220,7 @@ void SaveHahaScalingToTxt()
 
         UpdateGaussianRenderer();
         // CreateOtherDataAsset();
-        SaveTBufferToTxt();
+        // SaveTBufferToTxt();
         // SaveRBufferToTxt();
         // SaveKBufferToTxt();
         // SavetempBufferToTxt();
