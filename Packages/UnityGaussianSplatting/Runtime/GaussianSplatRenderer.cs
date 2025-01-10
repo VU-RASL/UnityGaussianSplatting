@@ -134,16 +134,23 @@ namespace GaussianSplatting.Runtime
                 if (gs.updatedPositionsBuffer != null)
                 {
                     mpb.SetBuffer("_SplatPos", gs.updatedPositionsBuffer);
+
                 }
                 else
                 {
                     mpb.SetBuffer("_SplatPos", gs.m_GpuPosData);
                 }
                 
-                mpb.SetBuffer("_RECORD",gs.m_recordBuffer);
-            
-                       
+                // mpb.SetBuffer("_RECORD",gs.m_recordBuffer);
+                
+                // float3[] gs_xyz = new float3[13541];
+                //     gs.m_GpuPosData.GetData(gs_xyz);
+                //     Debug.Log("GPU");
+                //     Debug.Log(gs_xyz[0]);
+                
+                
                 gs.m_TBuffer.SetData(gs.T);
+ 
                 // Debug.Log(gs.T[0]);
                 mpb.SetBuffer("_TBuffer",gs.m_TBuffer); 
 
@@ -287,7 +294,7 @@ namespace GaussianSplatting.Runtime
         public GraphicsBuffer m_GpuPosData;
         public ComputeBuffer m_TBuffer;
         public GraphicsBuffer m_recordBuffer;
-        public Vector3[] T;
+        public float3[] T;
         public GraphicsBuffer m_GpuOtherData;
         public GraphicsBuffer m_GpuSHData;
         public Texture m_GpuColorData;
@@ -460,7 +467,7 @@ namespace GaussianSplatting.Runtime
 
             m_TBuffer = new ComputeBuffer(splatCount, sizeof(float) * 3);
 
-            T = new Vector3[splatCount];
+            T = new float3[splatCount];
             m_TBuffer.SetData(T);
 
 
@@ -546,6 +553,8 @@ namespace GaussianSplatting.Runtime
             {
                 mat.SetBuffer("_SplatPos", m_GpuPosData);
             }
+
+            
             mat.SetBuffer(Props.SplatPos, m_GpuPosData);
             mat.SetBuffer(Props.SplatOther, m_GpuOtherData);
             mat.SetBuffer(Props.SplatSH, m_GpuSHData);
@@ -624,7 +633,16 @@ namespace GaussianSplatting.Runtime
             int screenW = cam.pixelWidth, screenH = cam.pixelHeight;
             Vector4 screenPar = new Vector4(screenW, screenH, 0, 0);
             Vector4 camPos = cam.transform.position;
-
+            // Debug.Log("MatrixVP");
+            // Matrix4x4 MatrixVP = matProj * matView;
+            // for (int i = 0; i < 4; i++)
+            // {
+            //     string row = $"{MatrixVP[i, 0]}, {MatrixVP[i, 1]}, {MatrixVP[i, 2]}, {MatrixVP[i, 3]}";
+            //     Debug.Log($"Row {i}: {row}");
+            // }
+            // SaveMatrixToFile("Assets/GaussianAssets/MatrixObjectToWorld.txt",matO2W);
+            // SaveMatrixToFile("Assets/GaussianAssets/MatrixVP.txt",matProj * matView);
+ 
             // calculate view dependent data for each splat
             SetAssetDataOnCS(cmb, KernelIndices.CalcViewData);
             
@@ -1117,5 +1135,32 @@ namespace GaussianSplatting.Runtime
         }
 
         public GraphicsBuffer GpuEditDeleted => m_GpuEditDeleted;
+
+
+        void SaveMatrixToFile(string fileName, Matrix4x4 matrix)
+    {
+        string filePath = fileName;
+
+        try
+        {
+            using (StreamWriter writer = new StreamWriter(filePath))
+            {
+                for (int i = 0; i < 4; i++)
+                {
+                    writer.WriteLine($"{matrix[i, 0]}, {matrix[i, 1]}, {matrix[i, 2]}, {matrix[i, 3]}");
+                }
+            }
+            Debug.Log($"{fileName} saved to {filePath}");
+        }
+        catch (IOException ex)
+        {
+            Debug.LogError($"Failed to save {fileName}: {ex.Message}");
+        }
     }
+
+    }
+
+
+
+    
 }

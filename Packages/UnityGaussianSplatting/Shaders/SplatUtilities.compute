@@ -204,7 +204,8 @@ void CSCalcViewData (uint3 id : SV_DispatchThreadID)
     half opacityScale = _SplatOpacityScale;
     float splatScale = _SplatScale;
 
-    
+    float3 dirction = (faceClipPos-centerClipPos).xyz;
+    float3 z_depth = (0,0,1);
 
     // deleted?
     if (_SplatBitsValid)
@@ -250,10 +251,12 @@ void CSCalcViewData (uint3 id : SV_DispatchThreadID)
         col.rgb = ShadeSH(splat.sh, objViewDir, _SHOrder, _SHOnly != 0);
         col.a = min(splat.opacity * opacityScale, 65000);
 
-        if (centerClipPos.z < faceClipPos.z)
-        {
-            col.a = 0;
-        }
+        // if (centerClipPos.z < faceClipPos.z)
+        // {
+        //     col.a = 0;
+        // }
+
+
 
         // col.a = splat.opacity;
         col.rgb = ShadeSH(splat.sh, objViewDir, _SHOrder, false);

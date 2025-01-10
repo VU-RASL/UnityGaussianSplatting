@@ -7,17 +7,19 @@ Shader "Custom/RenderUVWithVerticesAndBuffer"
     }
     SubShader
     {
-        Tags { "RenderType"="Opaque" }
+        Tags { "RenderType"="Transparent" "Queue"="Transparent" }
         LOD 200
 
         Pass
         {
+
+            Blend One OneMinusSrcAlpha
             CGPROGRAM
             #pragma target 5.0 // Ensure Shader Model 5.0 support
             #pragma vertex vert
             #pragma fragment frag
             #include "UnityCG.cginc"
-
+            
             sampler2D _MainTex;
             float4 _Color;
 
@@ -53,6 +55,8 @@ Shader "Custom/RenderUVWithVerticesAndBuffer"
             half4 frag (v2f i) : SV_Target
             {
                 half4 tex = tex2D(_MainTex, i.uv);
+// 
+                
                 return half4(tex.rgb * _Color.rgb, tex.a);
             }
             ENDCG

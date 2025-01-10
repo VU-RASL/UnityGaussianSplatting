@@ -17,7 +17,7 @@ StructuredBuffer<float3> HahaScalingBuffer;  // Original Gaussian scaling
 RWStructuredBuffer<float3> TBuffer;         // Translations (output)
 RWStructuredBuffer<float4> RBuffer;         // Rotations as quaternions (output)
 RWStructuredBuffer<float> kBuffer;          // Scaling factors (output)
-RWStructuredBuffer<float> tempBuffer;          // Scaling factors (output)
+RWStructuredBuffer<float3> tempBuffer;          // Scaling factors (output)
 // Combined Gaussian-specific buffer
 struct GaussianData
 {
@@ -338,7 +338,10 @@ void MapGaussiansToFaces(uint3 id : SV_DispatchThreadID)
     float3 pos = T + QuaternionApply(R, gOffset) * k;
     // float3 pos = T;
     pos.x *= -1; // Mirror position along x-axis
-    TBuffer[id.x] = pos;
+    //  TODO handle a little offset
+    pos.x -= -0.006;
+    T.x *= -1;
+    TBuffer[id.x] = T ;
 
     UpdatedScalingBuffer[id.x] =  data.scaling;
     UpdatedXyzBuffer[id.x] = pos;
@@ -350,7 +353,7 @@ void MapGaussiansToFaces(uint3 id : SV_DispatchThreadID)
 
 
        
-    tempBuffer[id.x] =k ;
+    tempBuffer[id.x] = pos ;
 
 
     
