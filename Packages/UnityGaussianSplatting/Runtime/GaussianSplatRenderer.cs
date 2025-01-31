@@ -663,8 +663,43 @@ namespace GaussianSplatting.Runtime
             cmb.SetComputeIntParam(m_CSSplatUtilities, Props.SHOnly, m_SHOnly ? 1 : 0);
             cmb.SetComputeIntParam(m_CSSplatUtilities, Props.DCOnly, m_DCOnly ? 1 : 0);
 
+
+            
+
+            // m_CSSplatUtilities.GetKernelThreadGroupSizes((int)KernelIndices.CalcViewData, out uint gsX, out _, out _);
+            // cmb.DispatchCompute(m_CSSplatUtilities, (int)KernelIndices.CalcViewData, (m_GpuView.count + (int)gsX - 1)/(int)gsX, 1, 1);
+            // Vector[] debugData = new Vector[];
+            // m_GpuView.GetData(debugData);
+            // Debug.Log(debugData[0]);
+
             m_CSSplatUtilities.GetKernelThreadGroupSizes((int)KernelIndices.CalcViewData, out uint gsX, out _, out _);
-            cmb.DispatchCompute(m_CSSplatUtilities, (int)KernelIndices.CalcViewData, (m_GpuView.count + (int)gsX - 1)/(int)gsX, 1, 1);
+            cmb.DispatchCompute(m_CSSplatUtilities, (int)KernelIndices.CalcViewData, (m_GpuView.count + (int)gsX - 1) / (int)gsX, 1, 1);
+
+            // // Retrieve the compute shader output for debugging
+            // SplatViewData[] debugData = new SplatViewData[m_GpuView.count];
+            // m_GpuView.GetData(debugData);
+            // Debug.Log($"Debug Data Before Manual Update: {debugData[0].pos}");
+
+            // // Manually update m_GpuView
+            // SplatViewData[] updatedData = new SplatViewData[m_GpuView.count];
+            // for (int i = 0; i < updatedData.Length; i++)
+            // {
+            //     updatedData[i].pos = new float4(0, 0, 0, 1); // Example data
+            //     updatedData[i].axis1 = new float2(1, 0);
+            //     updatedData[i].axis2 = new float2(0, 1);
+            //     updatedData[i].color = new uint2(0xFFFF, 0xFFFF);
+            // }
+
+
+
+
+        }
+        public struct SplatViewData
+        {
+            public float4 pos;       // Center position in clip space
+            public float2 axis1;     // Axis1 for splat quad
+            public float2 axis2;     // Axis2 for splat quad
+            public uint2 color;      // Encoded RGBA color (16 bits per channel)
         }
 
         internal void SortPoints(CommandBuffer cmd, Camera cam, Matrix4x4 matrix)

@@ -38,12 +38,12 @@ public class PoseController : MonoBehaviour
         // Debug.Log(hahaImporter.data.betas);
         
 
-        // for (int i = 0; i < SMPLX.NUM_BETAS; i++)
-        // {
-        //     smplx.betas[i] = hahaImporter.data.betas[i];
-        // }
+        for (int i = 0; i < SMPLX.NUM_BETAS; i++)
+        {
+            smplx.betas[i] = hahaImporter.data.betas[i];
+        }
         smplx.ResetBodyPose();
-        // smplx.SetBetaShapes();
+        smplx.SetBetaShapes();
 
         Debug.Log("ResetTPose");
 
@@ -88,7 +88,7 @@ public class PoseController : MonoBehaviour
         
         
         // Start the pose animation loop
-        // StartCoroutine(AnimatePose());
+        StartCoroutine(AnimatePose());
         
     }
 
@@ -156,17 +156,28 @@ public class PoseController : MonoBehaviour
 
     System.Collections.IEnumerator AnimatePose()
     {
-        
+        int key =1;
         while (true)
         {
-            if (isTPose)
+            
+            if (key == 1)
             {
-                smplx.SetBodyPose(SMPLX.BodyPose.A);
+                smplx.SetBodyPose(SMPLX.BodyPose.T);
                 // ApplyCustomPose(GenerateRandomPose()); // Apply a random pose
+                key = key +1;
             }
-            else
-            {
+            else if (key == 2){
+                smplx.SetBodyPose(SMPLX.BodyPose.A);
+                key = key +1;
+            }
+            else if (key == 3){
                 smplx.SetBodyPose(SMPLX.BodyPose.C);
+                key = key +1;
+            }
+            else if (key == 4)
+            {
+                smplx.SetBodyPose(SMPLX.BodyPose.S);
+                key = 1;
             }
 
             // Update the GPU vertex buffer with the baked mesh data
@@ -257,19 +268,19 @@ public class PoseController : MonoBehaviour
             // vertices[i] += debug.position; 
             vertices[i].x = -vertices[i].x;
         }
-        //     // Specify the file path
-        // string filePath = Application.dataPath + "/UnityVertices.txt";
+            // Specify the file path
+        string filePath = Application.dataPath + "/UnityVertices.txt";
 
-        // // Write vertices to the file
-        // using (StreamWriter writer = new StreamWriter(filePath))
-        // {
-        //     foreach (Vector3 vertex in vertices)
-        //     {
-        //         writer.WriteLine($"{vertex.x} {vertex.y} {vertex.z}");
-        //     }
-        // }
+        // Write vertices to the file
+        using (StreamWriter writer = new StreamWriter(filePath))
+        {
+            foreach (Vector3 vertex in vertices)
+            {
+                writer.WriteLine($"{vertex.x} {vertex.y} {vertex.z}");
+            }
+        }
 
-        // Debug.Log($"Vertices saved to {filePath}");
+        Debug.Log($"Vertices saved to {filePath}");
 
         
         // Upload the vertex positions to the GPU buffer
@@ -351,24 +362,6 @@ public class PoseController : MonoBehaviour
 
     }
 
-    public void UpdateBetas(float[] newBetas)
-    {
-        if (newBetas.Length != SMPLX.NUM_BETAS)
-        {
-            Debug.LogError($"Invalid betas length! Expected {SMPLX.NUM_BETAS} values.");
-            return;
-        }
-
-        // Update the `betas` field in SMPLX
-        for (int i = 0; i < SMPLX.NUM_BETAS; i++)
-        {
-            smplx.betas[i] = newBetas[i];
-        }
-
-        // Apply the updated betas to the mesh
-        smplx.SetBetaShapes();
-        Debug.Log("Updated and applied new betas to SMPLX mesh.");
-    }
     public ComputeBuffer GetVertexBuffer()
     {
         return vertexBuffer;

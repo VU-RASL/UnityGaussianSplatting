@@ -223,7 +223,7 @@ void SaveHahaScalingToTxt()
         // SaveTBufferToTxt();
         // SaveRBufferToTxt();
         // SaveKBufferToTxt();
-        // SavetempBufferToTxt();
+        SavetempBufferToTxt();
         // DebugFaceBuffer();
         // DebugGaussianToFaceBuffer();
     }
@@ -264,9 +264,6 @@ void SaveTBufferToTxt()
         int count = TBuffer.count;
         Vector3[] data = new Vector3[count];
         TBuffer.GetData(data); // Fetch actual buffer data
-        Vector3 pos = data[0];
-        pos.x *= -1;
-        debug.transform.position = pos;
 
         using (StreamWriter writer = new StreamWriter(filePath))
         {
@@ -415,12 +412,12 @@ void SavetempBufferToTxt()
                 UpdatedXyzBuffer.GetData(updatedPositions);
                 gaussianRenderer.m_GpuPosData.SetData(updatedPositions);
 
-                float3[] updatedT = new float3[updatedCount];
-                TBuffer.GetData(updatedT);
-                // Debug.Log("Just read");
-                // Debug.Log(updatedT[0]);
-                // gaussianRenderer.m_TData.SetData(updatedT);
-                gaussianRenderer.T = updatedT;
+                // float3[] updatedT = new float3[updatedCount];
+                // TBuffer.GetData(updatedT);
+                // // Debug.Log("Just read");
+                // // Debug.Log(updatedT[0]);
+                // // gaussianRenderer.m_TData.SetData(updatedT);
+                // gaussianRenderer.T = updatedT;
             }
         }
         

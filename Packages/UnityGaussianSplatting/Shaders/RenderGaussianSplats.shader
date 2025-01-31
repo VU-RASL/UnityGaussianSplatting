@@ -8,8 +8,9 @@ Shader "Gaussian Splatting/Render Splats"
         Pass
         {
             ZWrite Off
-            Blend OneMinusDstAlpha One
+            Blend OneMinusDstAlpha		 One
             Cull Off
+			
             
 CGPROGRAM
 #pragma vertex vert
@@ -23,7 +24,7 @@ StructuredBuffer<uint> _OrderBuffer;
 StructuredBuffer<vector> _TBuffer;
 // RWStructuredBuffer<float3> _RECORD;
 struct v2f
-{
+{	
     half4 col : COLOR0;
     float2 pos : TEXCOORD0;
     float4 vertex : SV_POSITION;

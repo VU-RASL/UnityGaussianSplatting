@@ -211,8 +211,7 @@ float4 quaternion_multiply(float4 a, float4 b)
 [numthreads(64, 1, 1)]
 void CalcFacesTransform(uint3 id : SV_DispatchThreadID)
 {
-    if (id.x >= FaceBuffer.Length)
-        return;
+
 
     // Load face vertex indices
     // int3 face = FaceBuffer[id.x];
@@ -222,13 +221,13 @@ void CalcFacesTransform(uint3 id : SV_DispatchThreadID)
     float3 v0 = VertexBuffer[face.x];
     float3 v1 = VertexBuffer[face.y];
     float3 v2 = VertexBuffer[face.z];
+    
     // v0.x *= -1;
     // v1.x *= -1;
     // v2.x *= -1;
 
     // Calculate translation (T): Mean of vertices
     float3 T = (v0 + v1 + v2) / 3.0f;
-   
     TBuffer[id.x] = T;
 
     // Calculate vectors for face edges
@@ -336,12 +335,13 @@ void MapGaussiansToFaces(uint3 id : SV_DispatchThreadID)
 
     // Apply mirroring to position
     float3 pos = T + QuaternionApply(R, gOffset) * k;
+    
     // float3 pos = T;
     pos.x *= -1; // Mirror position along x-axis
     //  TODO handle a little offset
-    pos.x -= -0.006;
-    T.x *= -1;
-    TBuffer[id.x] = T ;
+    // pos.x -= -0.006;
+    tempBuffer[id.x] = pos;
+
 
     UpdatedScalingBuffer[id.x] =  data.scaling;
     UpdatedXyzBuffer[id.x] = pos;
@@ -353,7 +353,7 @@ void MapGaussiansToFaces(uint3 id : SV_DispatchThreadID)
 
 
        
-    tempBuffer[id.x] = pos ;
+    // tempBuffer[id.x] = gOffset ;
 
 
     
