@@ -171,14 +171,14 @@ public class PoseController : MonoBehaviour
                 key = key +1;
             }
             else if (key == 3){
-                smplx.SetBodyPose(SMPLX.BodyPose.C);
-                key = key +1;
-            }
-            else if (key == 4)
-            {
                 smplx.SetBodyPose(SMPLX.BodyPose.S);
                 key = 1;
             }
+            // else if (key == 4)
+            // {
+            //     smplx.SetBodyPose(SMPLX.BodyPose.S);
+            //     key = 1;
+            // }
 
             // Update the GPU vertex buffer with the baked mesh data
             UpdateVertexBuffer();
@@ -269,18 +269,18 @@ public class PoseController : MonoBehaviour
             vertices[i].x = -vertices[i].x;
         }
             // Specify the file path
-        string filePath = Application.dataPath + "/UnityVertices.txt";
+        // string filePath = Application.dataPath + "/UnityVertices.txt";
 
-        // Write vertices to the file
-        using (StreamWriter writer = new StreamWriter(filePath))
-        {
-            foreach (Vector3 vertex in vertices)
-            {
-                writer.WriteLine($"{vertex.x} {vertex.y} {vertex.z}");
-            }
-        }
+        // // Write vertices to the file
+        // using (StreamWriter writer = new StreamWriter(filePath))
+        // {
+        //     foreach (Vector3 vertex in vertices)
+        //     {
+        //         writer.WriteLine($"{vertex.x} {vertex.y} {vertex.z}");
+        //     }
+        // }
 
-        Debug.Log($"Vertices saved to {filePath}");
+        // Debug.Log($"Vertices saved to {filePath}");
 
         
         // Upload the vertex positions to the GPU buffer

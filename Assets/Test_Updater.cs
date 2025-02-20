@@ -223,7 +223,7 @@ void SaveHahaScalingToTxt()
         // SaveTBufferToTxt();
         // SaveRBufferToTxt();
         // SaveKBufferToTxt();
-        SavetempBufferToTxt();
+        // SavetempBufferToTxt();
         // DebugFaceBuffer();
         // DebugGaussianToFaceBuffer();
     }
