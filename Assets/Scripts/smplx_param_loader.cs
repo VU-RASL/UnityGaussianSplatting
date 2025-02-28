@@ -5,6 +5,7 @@ using System.IO;
 using Newtonsoft.Json;
 using UnityEngine;
 using Unity.Mathematics;
+// using System.Numerics;
 
 [ExecuteInEditMode]
 public class smplxImporter : MonoBehaviour
@@ -14,7 +15,7 @@ public class smplxImporter : MonoBehaviour
     [SerializeField] public SMPLX smplx; // Reference to the SMPL-X model
     [SerializeField] public Transform root;
     // SMPL-X joint names in Unity
-    string[] _bodyJointNames = new string[] { 
+    public string[] _bodyJointNames = new string[] { 
         "pelvis",
         "left_hip",
         "right_hip",
@@ -51,14 +52,14 @@ public class smplxImporter : MonoBehaviour
     {
         foreach (HahaAvatarDataS avatarData in allData)
         {
-            root.transform.rotation = avatarData.root_pose_quaternions[0]* Quaternion.Euler(0, 180, 180);            
+            // root.transform.rotation = avatarData.root_pose_quaternions[0]* Quaternion.Euler(0, 180, 180);            
             
             
             if (avatarData.body_pose_quaternions != null)
             {
-                Debug.Log($"Applying 'body_pose' with {avatarData.body_pose_quaternions.Length} joints:");
+                Debug.Log($"Applying 'body_pose' with {avatarData.body_pose_quaternions.Count} joints:");
 
-                for (int i = 0; i < avatarData.body_pose_quaternions.Length; i++)
+                for (int i = 0; i < avatarData.body_pose_quaternions.Count; i++)
                 {
 
                     Quaternion jointRotation = avatarData.body_pose_quaternions[i];   
@@ -157,8 +158,8 @@ public class smplxImporter : MonoBehaviour
 [Serializable]
 public class HahaAvatarDataS
 {
-    public Quaternion[] body_pose_quaternions; 
-    public Quaternion[] root_pose_quaternions; 
+    public List<Quaternion> body_pose_quaternions; 
+    // public List<Quaternion> root_pose_quaternions; 
 
     public class HahaOutputDataS
     {
@@ -168,6 +169,7 @@ public class HahaAvatarDataS
 
     public HahaAvatarDataS(string path)
     {
+        body_pose_quaternions = new List<Quaternion>();
         if (!File.Exists(path))
         {
             Debug.LogError($"JSON file not found at: {path}");
@@ -189,24 +191,28 @@ public class HahaAvatarDataS
         Debug.Log($"Shape of 'body_pose' in {Path.GetFileName(path)}: {numRows} x {numCols}");
 
         // Convert Rodrigues rotation vectors to Quaternions
-        body_pose_quaternions = ConvertToQuaternions(data.body_pose);
-        root_pose_quaternions = new Quaternion[1] { ConvertSingleRodriguesToQuaternion(data.root_pose) };  // Convert 1x3 root_pose
+        body_pose_quaternions.Add(ConvertSingleRodriguesToQuaternion(data.root_pose));
+        body_pose_quaternions[0] = reorient(body_pose_quaternions[0]);
+        body_pose_quaternions.AddRange(ConvertToQuaternions(data.body_pose));
+        
+         
+        // root_pose_quaternions = new Quaternion[1] { ConvertSingleRodriguesToQuaternion(data.root_pose) };  // Convert 1x3 root_pose
     }
 
 
-    private Quaternion[] ConvertToQuaternions(float[][] inputNestedMatrix)
+    private List<Quaternion> ConvertToQuaternions(float[][] inputNestedMatrix)
     {
         int rowCount = inputNestedMatrix.Length;
-        Quaternion[] outputArray = new Quaternion[rowCount];
+        List<Quaternion> outputList = new List<Quaternion>();
 
         for (int rowIndex = 0; rowIndex < rowCount; rowIndex++)
         {
 
-            outputArray[rowIndex] = QuatFromRodrigues(inputNestedMatrix[rowIndex][0],
+            outputList.Add(QuatFromRodrigues(inputNestedMatrix[rowIndex][0],
                                                         inputNestedMatrix[rowIndex][1],
-                                                        inputNestedMatrix[rowIndex][2]);
+                                                        inputNestedMatrix[rowIndex][2]));
         }
-        return outputArray;
+        return outputList;
     }
     private Quaternion ConvertSingleRodriguesToQuaternion(float[] inputVector)
     {
@@ -222,13 +228,27 @@ public class HahaAvatarDataS
 public static Quaternion QuatFromRodrigues(float rodX, float rodY, float rodZ)
 {
         Vector3 axis = new Vector3(-rodX, rodY, rodZ);
-        float angle_deg = axis.magnitude * Mathf.Rad2Deg;
+        float angle_deg = - axis.magnitude * Mathf.Rad2Deg;
         Vector3.Normalize(axis);
 
         Quaternion quat = Quaternion.AngleAxis(angle_deg, axis);
         
         return quat;
 }
+
+private Quaternion diff(Quaternion a, Quaternion b){
+    // return quat diff such that a*diff = b
+    Quaternion diff = b * Quaternion.Inverse(a);
+    return diff;
+}
+
+private Quaternion reorient(Quaternion a){
+    Quaternion forward = Quaternion.LookRotation(Vector3.forward, Vector3.up);
+
+    a *= diff(a, forward);
+    return a;
+}
+
 }
 
 
