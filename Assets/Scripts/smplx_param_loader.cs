@@ -62,15 +62,15 @@ public class smplxImporter : MonoBehaviour
                 for (int i = 0; i < avatarData.body_pose_quaternions.Count; i++)
                 {
 
-                    Quaternion jointRotation = avatarData.body_pose_quaternions[i];   
+                    Quaternion jointRotation = avatarData.body_pose_quaternions[i] ;
+        
                     string jointName = _bodyJointNames[i];
 
                     // jointRotation = avatarData.body_pose_quaternions[i];
 
-                    // if (jointName == "right_shoulder" || jointName == "right_elbow" || jointName == "right_collar" || jointName == "right_wrist" 
-                    //     || jointName == "neck" || jointName == "head")
+                    // if (jointName == "pelvis" )
                     // {
-                    //     jointRotation.z = -jointRotation.z;
+                    //     jointRotation = avatarData.body_pose_quaternions[i] * Quaternion.Euler(180,0,0);
                     // }
                     smplx.SetLocalJointRotation(jointName, jointRotation);
                     
@@ -88,6 +88,7 @@ public class smplxImporter : MonoBehaviour
             }
         }
         smplx.ResetBodyPose();
+        
     }
 
     void ReadAllJsonFiles()
@@ -192,7 +193,7 @@ public class HahaAvatarDataS
 
         // Convert Rodrigues rotation vectors to Quaternions
         body_pose_quaternions.Add(ConvertSingleRodriguesToQuaternion(data.root_pose));
-        body_pose_quaternions[0] = reorient(body_pose_quaternions[0]);
+        // body_pose_quaternions[0] = reorient(body_pose_quaternions[0]);
         body_pose_quaternions.AddRange(ConvertToQuaternions(data.body_pose));
         
          
@@ -231,14 +232,13 @@ public static Quaternion QuatFromRodrigues(float rodX, float rodY, float rodZ)
         float angle_deg = - axis.magnitude * Mathf.Rad2Deg;
         Vector3.Normalize(axis);
 
-        Quaternion quat = Quaternion.AngleAxis(angle_deg, axis);
-        
+        Quaternion quat = Quaternion.AngleAxis(angle_deg, axis)  ;
         return quat;
 }
 
 private Quaternion diff(Quaternion a, Quaternion b){
     // return quat diff such that a*diff = b
-    Quaternion diff = b * Quaternion.Inverse(a);
+    Quaternion diff = Quaternion.Inverse(a) * b;
     return diff;
 }
 
