@@ -7,7 +7,6 @@ using UnityEngine;
 using Unity.Mathematics;
 // using System.Numerics;
 
-[ExecuteInEditMode]
 public class smplxImporter : MonoBehaviour
 {
     public string folderPath = "Assets/smplx_example/";  // Path to folder containing JSON files
@@ -53,7 +52,8 @@ public class smplxImporter : MonoBehaviour
         foreach (HahaAvatarDataS avatarData in allData)
         {
             // root.transform.rotation = avatarData.root_pose_quaternions[0]* Quaternion.Euler(0, 180, 180);            
-            
+            root.transform.localScale = new Vector3(1, -1, -1);
+
             
             if (avatarData.body_pose_quaternions != null)
             {
