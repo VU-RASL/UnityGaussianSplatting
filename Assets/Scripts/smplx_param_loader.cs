@@ -12,7 +12,7 @@ public class smplxImporter : MonoBehaviour
     public string folderPath = "Assets/smplx_example/";  // Path to folder containing JSON files
     public List<HahaAvatarDataS> allData = new List<HahaAvatarDataS>(); // Store all loaded data
     [SerializeField] public SMPLX smplx; // Reference to the SMPL-X model
-
+    [SerializeField] public Transform root;
     // SMPL-X joint names in Unity
     string[] _bodyJointNames = new string[] { 
         "pelvis",
@@ -51,6 +51,9 @@ public class smplxImporter : MonoBehaviour
     {
         foreach (HahaAvatarDataS avatarData in allData)
         {
+            root.transform.rotation = avatarData.root_pose_quaternions[0]* Quaternion.Euler(0, 180, 180);            
+            
+            
             if (avatarData.body_pose_quaternions != null)
             {
                 Debug.Log($"Applying 'body_pose' with {avatarData.body_pose_quaternions.Length} joints:");
@@ -58,10 +61,10 @@ public class smplxImporter : MonoBehaviour
                 for (int i = 0; i < avatarData.body_pose_quaternions.Length; i++)
                 {
 
-                    Quaternion jointRotation = avatarData.body_pose_quaternions[i];
+                    Quaternion jointRotation = avatarData.body_pose_quaternions[i];   
                     string jointName = _bodyJointNames[i];
 
-                    jointRotation = avatarData.body_pose_quaternions[i];
+                    // jointRotation = avatarData.body_pose_quaternions[i];
 
                     // if (jointName == "right_shoulder" || jointName == "right_elbow" || jointName == "right_collar" || jointName == "right_wrist" 
                     //     || jointName == "neck" || jointName == "head")
@@ -155,10 +158,12 @@ public class smplxImporter : MonoBehaviour
 public class HahaAvatarDataS
 {
     public Quaternion[] body_pose_quaternions; 
+    public Quaternion[] root_pose_quaternions; 
 
     public class HahaOutputDataS
     {
         public float[][] body_pose;
+        public float[] root_pose;  // Single row (1x3) per file
     }
 
     public HahaAvatarDataS(string path)
@@ -172,9 +177,9 @@ public class HahaAvatarDataS
         string content = File.ReadAllText(path);
         HahaOutputDataS data = JsonConvert.DeserializeObject<HahaOutputDataS>(content);
 
-        if (data == null || data.body_pose == null)
+        if (data == null || data.body_pose == null || data.root_pose == null)
         {
-            Debug.LogError($"Error: Failed to parse 'body_pose' from {path}");
+            Debug.LogError($"Error: Missing 'body_pose' or 'root_pose' in {path}");
             return;
         }
 
@@ -185,7 +190,9 @@ public class HahaAvatarDataS
 
         // Convert Rodrigues rotation vectors to Quaternions
         body_pose_quaternions = ConvertToQuaternions(data.body_pose);
+        root_pose_quaternions = new Quaternion[1] { ConvertSingleRodriguesToQuaternion(data.root_pose) };  // Convert 1x3 root_pose
     }
+
 
     private Quaternion[] ConvertToQuaternions(float[][] inputNestedMatrix)
     {
@@ -194,17 +201,22 @@ public class HahaAvatarDataS
 
         for (int rowIndex = 0; rowIndex < rowCount; rowIndex++)
         {
-            // Vector3 axisAngle = new Vector3(
-            //     -inputNestedMatrix[rowIndex][0], // Negate X to match Unity's coordinate system
-            //     inputNestedMatrix[rowIndex][1], 
-            //     inputNestedMatrix[rowIndex][2]);
 
-            // outputArray[rowIndex] = RodriguesToQuaternion(axisAngle);
             outputArray[rowIndex] = QuatFromRodrigues(inputNestedMatrix[rowIndex][0],
                                                         inputNestedMatrix[rowIndex][1],
                                                         inputNestedMatrix[rowIndex][2]);
         }
         return outputArray;
+    }
+    private Quaternion ConvertSingleRodriguesToQuaternion(float[] inputVector)
+    {
+        if (inputVector == null || inputVector.Length != 3)
+        {
+            Debug.LogError("Error: root_pose is missing or not in [x,y,z] format.");
+            return Quaternion.identity;
+        }
+
+        return QuatFromRodrigues(inputVector[0], inputVector[1], inputVector[2]);
     }
 
 public static Quaternion QuatFromRodrigues(float rodX, float rodY, float rodZ)
