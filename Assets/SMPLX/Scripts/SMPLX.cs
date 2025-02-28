@@ -33,7 +33,7 @@ public class SMPLX : MonoBehaviour
 
     public enum ModelType {Unknown, Female, Neutral, Male};
     public enum HandPose {Flat, Relaxed};
-    public enum BodyPose {T, A,C, S};
+    public enum BodyPose {T, A,C, S,P};
 
     public ModelType modelType = ModelType.Unknown;
 
@@ -389,6 +389,10 @@ public class SMPLX : MonoBehaviour
             SetLocalJointRotation("left_shoulder", Quaternion.Euler(0.0f, 0.0f, 70.0f));
             SetLocalJointRotation("jaw", Quaternion.Euler(10.0f, 00.0f, 0.0f));
  
+        }
+        else if (pose == BodyPose.P)
+        {
+            ResetBodyPose();
         }
         UpdatePoseCorrectives();
         UpdateJointPositions(true);

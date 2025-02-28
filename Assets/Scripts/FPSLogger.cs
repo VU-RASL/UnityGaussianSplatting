@@ -5,21 +5,22 @@ using System.Collections.Generic;
 public class AverageFPSLogger : MonoBehaviour
 {
     private List<float> fpsList = new List<float>();
-    private float totalFrames = 0;
-    private float totalTime = 0;
-    private float logInterval = 60f; // 1 minute interval
+    private float logInterval = 600f; // Log every 60 seconds
+    private float startTime;
 
     void Start()
     {
+        startTime = Time.time; // Record when the game starts
         StartCoroutine(LogAverageFPS());
     }
 
     void Update()
     {
-        float currentFPS = 1.0f / Time.deltaTime;
-        fpsList.Add(currentFPS);
-        totalFrames++;
-        totalTime += Time.deltaTime;
+        if (Time.time - startTime > 1f) // Ignore first second
+        {
+            float currentFPS = 1.0f / Time.deltaTime;
+            fpsList.Add(currentFPS);
+        }
     }
 
     IEnumerator LogAverageFPS()
@@ -51,9 +52,9 @@ public class AverageFPSLogger : MonoBehaviour
         }
         float stdDevFPS = Mathf.Sqrt(varianceSum / fpsList.Count);
 
-        Debug.Log($"[FPS Logger] Average FPS (last {logInterval}s): {meanFPS:F2} ± {stdDevFPS:F2}");
+        Debug.Log($"[FPS Logger] Average FPS (last {logInterval}s, ignoring first second): {meanFPS:F2} ± {stdDevFPS:F2}");
 
-        // Clear the list to start fresh for the next interval
+        // Clear the list for the next interval
         fpsList.Clear();
     }
 }
