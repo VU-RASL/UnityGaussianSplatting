@@ -82,7 +82,7 @@ public class PoseController : MonoBehaviour
         // Initialize the GPU vertex buffer
         InitializeVertexBuffer();
 
-        smplx.SetBodyPose(SMPLX.BodyPose.T);
+        // smplx.SetBodyPose(SMPLX.BodyPose.T);
         UpdateVertexBuffer();
         // GetBuffers();
         
@@ -113,6 +113,10 @@ public class PoseController : MonoBehaviour
         haha_scalingBuffer.GetData(scales);
     }
 
+    void Update(){
+        Debug.Log("Update");
+        // UpdateVertexBuffer();
+    }
     void InitializeJoints()
     {
         // Get all child transforms of the SMPL-X model
@@ -156,24 +160,25 @@ public class PoseController : MonoBehaviour
 
     System.Collections.IEnumerator AnimatePose()
     {
+        
         int key =1;
         while (true)
         {
             
-            if (key == 1)
-            {
-                smplx.SetBodyPose(SMPLX.BodyPose.T);
-                // ApplyCustomPose(GenerateRandomPose()); // Apply a random pose
-                key = key +1;
-            }
-            else if (key == 2){
-                smplx.SetBodyPose(SMPLX.BodyPose.A);
-                key = key +1;
-            }
-            else if (key == 3){
-                smplx.SetBodyPose(SMPLX.BodyPose.S);
-                key = 1;
-            }
+            // if (key == 1)
+            // {
+            //     smplx.SetBodyPose(SMPLX.BodyPose.T);
+            //     // ApplyCustomPose(GenerateRandomPose()); // Apply a random pose
+            //     key = key +1;
+            // }
+            // else if (key == 2){
+            //     smplx.SetBodyPose(SMPLX.BodyPose.A);
+            //     key = key +1;
+            // }
+            // else if (key == 3){
+            //     smplx.SetBodyPose(SMPLX.BodyPose.S);
+            //     key = 1;
+            // }
             // else if (key == 4)
             // {
             //     smplx.SetBodyPose(SMPLX.BodyPose.S);
