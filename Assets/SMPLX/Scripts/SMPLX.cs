@@ -42,6 +42,7 @@ public class SMPLX : MonoBehaviour
 
     public bool usePoseCorrectives = true;
     public bool showJointPositions = false;
+    public bool lockRootJointHeight = true;
 
     private SkinnedMeshRenderer _smr = null;
     private Mesh _sharedMeshDefault = null;
@@ -54,6 +55,9 @@ public class SMPLX : MonoBehaviour
     private Mesh _bakedMesh = null;
     private Vector3[] _jointPositions = null;
     private Quaternion[] _jointRotations = null;
+    private Transform _rootJoint = null;
+    private float _rootJointInitialLocalY = 0.0f;
+    private bool _rootJointInitialLocalYCached = false;
 
     string[] _bodyJointNames = new string[] { "pelvis","left_hip","right_hip","spine1","left_knee","right_knee","spine2","left_ankle","right_ankle","spine3", "left_foot","right_foot","neck","left_collar","right_collar","head","left_shoulder","right_shoulder","left_elbow", "right_elbow","left_wrist","right_wrist","jaw","left_eye_smplhf","right_eye_smplhf","left_index1","left_index2","left_index3","left_middle1","left_middle2","left_middle3","left_pinky1","left_pinky2","left_pinky3","left_ring1","left_ring2","left_ring3","left_thumb1","left_thumb2","left_thumb3","right_index1","right_index2","right_index3","right_middle1","right_middle2","right_middle3","right_pinky1","right_pinky2","right_pinky3","right_ring1","right_ring2","right_ring3","right_thumb1","right_thumb2","right_thumb3" };
     string[] _handLeftJointNames = new string[] { "left_index1","left_index2","left_index3","left_middle1","left_middle2","left_middle3","left_pinky1","left_pinky2","left_pinky3","left_ring1","left_ring2","left_ring3","left_thumb1","left_thumb2","left_thumb3" } ;
@@ -94,6 +98,8 @@ public class SMPLX : MonoBehaviour
         {
             _jointRotations = new Quaternion[NUM_JOINTS];
         }
+
+        CacheRootJointHeight();
 
         if (SMPLX.JointMatrices == null)
             InitJointRegressor();
@@ -524,6 +530,7 @@ public class SMPLX : MonoBehaviour
                 // Transform to game object space for correct world space position
                 joint.position = gameObject.transform.TransformPoint(position);
             }
+            LockRootJointHeight();
 
             // Set new bind pose
             Matrix4x4[] bindPoses = _smr.sharedMesh.bindposes;
@@ -547,9 +554,11 @@ public class SMPLX : MonoBehaviour
                 _jointPositions[i] = joint.position;
 
             }
+            LockRootJointHeight();
         }
         else
         {
+            LockRootJointHeight();
             for (int i=0; i<NUM_JOINTS; i++)
             {
                 // Update joint position cache
@@ -567,6 +576,40 @@ public class SMPLX : MonoBehaviour
         if (!usePoseCorrectives)
             UpdatePoseCorrectives();
     }
+
+    void LateUpdate()
+    {
+        LockRootJointHeight();
+    }
+
+    private void CacheRootJointHeight()
+    {
+        if (_rootJointInitialLocalYCached)
+            return;
+
+        if (_transformFromName == null)
+            return;
+
+        if (!_transformFromName.TryGetValue("pelvis", out _rootJoint))
+            return;
+
+        _rootJointInitialLocalY = _rootJoint.localPosition.y;
+        _rootJointInitialLocalYCached = true;
+    }
+
+    private void LockRootJointHeight()
+    {
+        if (!lockRootJointHeight)
+            return;
+
+        CacheRootJointHeight();
+        if (_rootJoint == null)
+            return;
+
+        Vector3 localPosition = _rootJoint.localPosition;
+        localPosition.y = _rootJointInitialLocalY;
+        _rootJoint.localPosition = localPosition;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -578,6 +621,7 @@ public class SMPLX_Editor : Editor {
 
     private SMPLX _target;
     private SerializedProperty _modelTypeProperty;
+    private SerializedProperty _lockRootJointHeightProperty;
     private bool _showShape = true;
     private bool _showExpression = true;
     private bool _autoSnapToGroundPlane = true;
@@ -597,6 +641,7 @@ public class SMPLX_Editor : Editor {
     {
         // Fetch the objects from the GameObject script to display in the inspector
         _modelTypeProperty = serializedObject.FindProperty("modelType");
+        _lockRootJointHeightProperty = serializedObject.FindProperty("lockRootJointHeight");
     }
 
     public override void OnInspectorGUI()
@@ -816,6 +861,7 @@ public class SMPLX_Editor : Editor {
                         _target.showJointPositions = showJointPositions;
                         SceneView.RepaintAll();
                     }
+                    EditorGUILayout.PropertyField(_lockRootJointHeightProperty, new GUIContent("Lock Root Joint Height"));
                     EditorGUIUtility.labelWidth = labelWidth;
                 }
             }

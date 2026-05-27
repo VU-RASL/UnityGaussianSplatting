@@ -18,12 +18,34 @@ public class PoseController : MonoBehaviour
 
     public ComputeBuffer vertexBuffer; // GPU buffer to store vertex positions
     private Transform[] joints;         // Array to store SMPL-X joint transforms
+    private readonly string[] customJointNames = new string[]
+    {
+        "pelvis", "left_hip", "right_hip", "spine1", "left_knee", "right_knee", "spine2",
+        "left_ankle", "right_ankle", "spine3", "left_foot", "right_foot", "neck",
+        "left_collar", "right_collar", "head", "left_shoulder", "right_shoulder",
+        "left_elbow", "right_elbow", "left_wrist", "right_wrist", "jaw",
+        "left_eye_smplhf", "right_eye_smplhf", "left_index1", "left_index2",
+        "left_index3", "left_middle1", "left_middle2", "left_middle3", "left_pinky1",
+        "left_pinky2", "left_pinky3", "left_ring1", "left_ring2", "left_ring3",
+        "left_thumb1", "left_thumb2", "left_thumb3", "right_index1", "right_index2",
+        "right_index3", "right_middle1", "right_middle2", "right_middle3",
+        "right_pinky1", "right_pinky2", "right_pinky3", "right_ring1", "right_ring2",
+        "right_ring3", "right_thumb1", "right_thumb2", "right_thumb3"
+    };
     private bool isTPose = true;        // Toggle between poses
     private SkinnedMeshRenderer smr;    // Reference to SkinnedMeshRenderer
     private Animator smplxAnimator;
     private Coroutine customPoseCoroutine;
+    private float[] activeCustomPose;
+    private float initialAnimatorSpeed = 1.0f;
     private bool previousUsingCustom;
     private bool previousVisualableMesh;
+    private Vector3 initialSmplxLocalPosition;
+    private Quaternion initialSmplxLocalRotation;
+    private Vector3 initialSmplxLocalScale;
+    private Vector3 initialMeshLocalPosition;
+    private Quaternion initialMeshLocalRotation;
+    private Vector3 initialMeshLocalScale;
     [SerializeField] public HahaImporter hahaImporter;
 
     public int3[] faces;
@@ -82,6 +104,8 @@ public class PoseController : MonoBehaviour
             Debug.LogError("SkinnedMeshRenderer not found on SMPLX object!");
             return;
         }
+        CacheInitialTransforms();
+        InitializeAnimator();
 
         // Initialize the joints array from the SMPL-X hierarchy
         InitializeJoints();
@@ -154,13 +178,35 @@ public class PoseController : MonoBehaviour
 
     void LateUpdate()
     {
+        if (using_custom)
+        {
+            if (activeCustomPose == null)
+            {
+                activeCustomPose = GetCustomPose();
+            }
+
+            ApplyCustomPose(activeCustomPose);
+        }
+
         UpdateVertexBuffer();
     }
     void InitializeJoints()
     {
-        // Get all child transforms of the SMPL-X model
-        joints = smplx.GetComponentsInChildren<Transform>();
-        // Debug.Log($"Found {joints.Length} joints in SMPL-X hierarchy.");
+        Transform[] childTransforms = smplx.GetComponentsInChildren<Transform>();
+        Dictionary<string, Transform> transformFromName = new Dictionary<string, Transform>();
+        foreach (Transform childTransform in childTransforms)
+        {
+            transformFromName[childTransform.name] = childTransform;
+        }
+
+        joints = new Transform[customJointNames.Length];
+        for (int i = 0; i < customJointNames.Length; i++)
+        {
+            if (!transformFromName.TryGetValue(customJointNames[i], out joints[i]))
+            {
+                Debug.LogError($"SMPL-X joint not found: {customJointNames[i]}");
+            }
+        }
     }
     void UpdateSMPLXBetas(float[] betas)
     {
@@ -201,7 +247,7 @@ public class PoseController : MonoBehaviour
     {
         while (true)
         {
-            ApplyCustomPose(GetCustomPose());
+            activeCustomPose = GetCustomPose();
 
             isTPose = !isTPose; // Toggle pose state
             float delay = poseSwitchTime > 0.0f ? poseSwitchTime : 1.0f;
@@ -213,6 +259,11 @@ public class PoseController : MonoBehaviour
     {
         foreach (var joint in joints)
         {
+            if (joint == null)
+            {
+                continue;
+            }
+
             joint.localRotation = Quaternion.identity; // Reset to default (T-pose)
         }
         Debug.Log("Applied T-pose to SMPL-X.");
@@ -247,6 +298,11 @@ public class PoseController : MonoBehaviour
     {
         for (int i = 0; i < joints.Length; i++)
         {
+            if (joints[i] == null)
+            {
+                continue;
+            }
+
             if (joints[i].name != jointName)
             {
                 continue;
@@ -262,6 +318,7 @@ public class PoseController : MonoBehaviour
     public void SetCustomPose(float[] pose)
     {
         customPose = pose;
+        activeCustomPose = pose;
     }
 
     public void ApplyCustomPose(float[] customPose)
@@ -274,6 +331,11 @@ public class PoseController : MonoBehaviour
 
         for (int i = 0; i < joints.Length; i++)
         {
+            if (joints[i] == null)
+            {
+                continue;
+            }
+
             // Extract rotation for each joint
             Vector3 rotation = new Vector3(
                 customPose[i * 3 + 0], // X rotation
@@ -285,21 +347,19 @@ public class PoseController : MonoBehaviour
         }
         smplx.UpdatePoseCorrectives();
         smplx.UpdateJointPositions(false);
-        Debug.Log("Applied custom pose to SMPL-X.");
     }
 
     void SetAnimatorDrivenMode(bool animatorDriven)
     {
         if (smplxAnimator != null)
         {
-            smplxAnimator.enabled = animatorDriven;
+            smplxAnimator.enabled = true;
             smplxAnimator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+            smplxAnimator.applyRootMotion = false;
+            smplxAnimator.speed = animatorDriven ? initialAnimatorSpeed : 0.0f;
         }
 
-        if (!animatorDriven)
-        {
-            smplx.ResetBodyPose();
-        }
+        RestoreInitialTransforms();
     }
 
     void ApplyMeshVisibility()
@@ -312,6 +372,50 @@ public class PoseController : MonoBehaviour
         smr.enabled = true;
         smr.updateWhenOffscreen = true;
         smr.forceRenderingOff = !visualable_mesh;
+    }
+
+    void CacheInitialTransforms()
+    {
+        Transform smplxTransform = smplx.transform;
+        initialSmplxLocalPosition = smplxTransform.localPosition;
+        initialSmplxLocalRotation = smplxTransform.localRotation;
+        initialSmplxLocalScale = smplxTransform.localScale;
+
+        Transform meshTransform = smr.transform;
+        initialMeshLocalPosition = meshTransform.localPosition;
+        initialMeshLocalRotation = meshTransform.localRotation;
+        initialMeshLocalScale = meshTransform.localScale;
+    }
+
+    void RestoreInitialTransforms()
+    {
+        Transform smplxTransform = smplx.transform;
+        smplxTransform.localPosition = initialSmplxLocalPosition;
+        smplxTransform.localRotation = initialSmplxLocalRotation;
+        smplxTransform.localScale = initialSmplxLocalScale;
+
+        Transform meshTransform = smr.transform;
+        meshTransform.localPosition = initialMeshLocalPosition;
+        meshTransform.localRotation = initialMeshLocalRotation;
+        meshTransform.localScale = initialMeshLocalScale;
+    }
+
+    void InitializeAnimator()
+    {
+        if (smplxAnimator == null)
+        {
+            return;
+        }
+
+        bool wasEnabled = smplxAnimator.enabled;
+        initialAnimatorSpeed = smplxAnimator.speed;
+        smplxAnimator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+        smplxAnimator.applyRootMotion = false;
+        smplxAnimator.enabled = true;
+        smplxAnimator.Update(0.0f);
+        smplxAnimator.enabled = true;
+        smplxAnimator.speed = wasEnabled ? initialAnimatorSpeed : 0.0f;
+        RestoreInitialTransforms();
     }
 
     // float[] GenerateRandomPose()
