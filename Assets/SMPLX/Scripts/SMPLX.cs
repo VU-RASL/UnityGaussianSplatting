@@ -43,6 +43,7 @@ public class SMPLX : MonoBehaviour
     public bool usePoseCorrectives = true;
     public bool showJointPositions = false;
     public bool lockRootJointHeight = true;
+    public bool warnOnSharedMeshClone = false;
 
     private SkinnedMeshRenderer _smr = null;
     private Mesh _sharedMeshDefault = null;
@@ -479,7 +480,10 @@ public class SMPLX : MonoBehaviour
                 // Note that this will drastically increase the Unity scene file size and make Unity Editor very slow on save when multiple bodies like this are used.
                 _sharedMeshDefault = _smr.sharedMesh;
                 _smr.sharedMesh = (Mesh)Instantiate( _smr.sharedMesh );
-                Debug.LogWarning("[SMPL-X] Cloning shared mesh to allow for joint recalculation on beta shape change [" + gameObject.name + "]. Note that this will increase the current scene file size significantly if model contains pose correctives.");
+                if (warnOnSharedMeshClone)
+                {
+                    Debug.LogWarning("[SMPL-X] Cloning shared mesh to allow for joint recalculation on beta shape change [" + gameObject.name + "]. Note that this will increase the current scene file size significantly if model contains pose correctives.");
+                }
             }
 
             // Save pose and repose to T-Pose
@@ -622,6 +626,7 @@ public class SMPLX_Editor : Editor {
     private SMPLX _target;
     private SerializedProperty _modelTypeProperty;
     private SerializedProperty _lockRootJointHeightProperty;
+    private SerializedProperty _warnOnSharedMeshCloneProperty;
     private bool _showShape = true;
     private bool _showExpression = true;
     private bool _autoSnapToGroundPlane = true;
@@ -642,6 +647,7 @@ public class SMPLX_Editor : Editor {
         // Fetch the objects from the GameObject script to display in the inspector
         _modelTypeProperty = serializedObject.FindProperty("modelType");
         _lockRootJointHeightProperty = serializedObject.FindProperty("lockRootJointHeight");
+        _warnOnSharedMeshCloneProperty = serializedObject.FindProperty("warnOnSharedMeshClone");
     }
 
     public override void OnInspectorGUI()
@@ -862,6 +868,7 @@ public class SMPLX_Editor : Editor {
                         SceneView.RepaintAll();
                     }
                     EditorGUILayout.PropertyField(_lockRootJointHeightProperty, new GUIContent("Lock Root Joint Height"));
+                    EditorGUILayout.PropertyField(_warnOnSharedMeshCloneProperty, new GUIContent("Warn On Mesh Clone"));
                     EditorGUIUtility.labelWidth = labelWidth;
                 }
             }

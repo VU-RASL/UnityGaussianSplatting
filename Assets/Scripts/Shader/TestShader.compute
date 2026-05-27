@@ -17,19 +17,9 @@ StructuredBuffer<float3> HahaScalingBuffer;  // Original Gaussian scaling
 RWStructuredBuffer<float3> TBuffer;         // Translations (output)
 RWStructuredBuffer<float4> RBuffer;         // Rotations as quaternions (output)
 RWStructuredBuffer<float> kBuffer;          // Scaling factors (output)
-RWStructuredBuffer<float3> tempBuffer;          // Scaling factors (output)
-// Combined Gaussian-specific buffer
-struct GaussianData
-{
-
-    float4 rotation;    
-    float3 scaling;      
-};
-RWStructuredBuffer<GaussianData> GaussianDataBuffer; // Combined buffer
-
-RWStructuredBuffer<float3> UpdatedXyzBuffer;    // Updated Gaussian positions
-RWStructuredBuffer<float3> UpdatedScalingBuffer;    // Updated Gaussian scaling
-RWStructuredBuffer<float4> UpdatedRotationBuffer;    // Updated Gaussian rotation
+RWByteAddressBuffer SplatPosOutput;
+RWByteAddressBuffer SplatOtherOutput;
+int _SplatOtherStride;
 
 // Constants
 #define MAX_SCALE 0.05f
@@ -201,6 +191,43 @@ float4 MatrixToQuaternion_Wxyz(float3x3 M)
     q = normalize(q);
     return q;
 }
+
+float4 PackSmallest3Rotation(float4 q)
+{
+    float4 absQ = abs(q);
+    int index = 0;
+    float maxV = absQ.x;
+    if (absQ.y > maxV)
+    {
+        index = 1;
+        maxV = absQ.y;
+    }
+    if (absQ.z > maxV)
+    {
+        index = 2;
+        maxV = absQ.z;
+    }
+    if (absQ.w > maxV)
+    {
+        index = 3;
+    }
+
+    if (index == 0) q = q.yzwx;
+    if (index == 1) q = q.xzwy;
+    if (index == 2) q = q.xywz;
+
+    float3 three = q.xyz * (q.w >= 0.0f ? 1.0f : -1.0f);
+    three = (three * 1.41421356237f) * 0.5f + 0.5f;
+    return float4(three, index / 3.0f);
+}
+
+uint EncodeQuatToNorm10(float4 v)
+{
+    return (uint)(v.x * 1023.5f) |
+           ((uint)(v.y * 1023.5f) << 10) |
+           ((uint)(v.z * 1023.5f) << 20) |
+           ((uint)(v.w * 3.5f) << 30);
+}
 // Quaternion multiplication with standardization
 float4 quaternion_multiply(float4 a, float4 b)
 {
@@ -322,16 +349,11 @@ void MapGaussiansToFaces(uint3 id : SV_DispatchThreadID)
     float4 gR = normalize(HahaRotationBuffer[id.x]); // gaussian rotation
     float3 gS = HahaScalingBuffer[id.x]; // gaussian scaling
 
-    // Compute and write to buffers
-    GaussianData data;
-
     // Apply mirroring to rotation
     float4 rot = quaternion_multiply(R, gR);
     
     rot.x *= -1;
     rot.y *= -1;
-    data.rotation = rot;
-    data.scaling = s_act(gS) * k;
 
     // Apply mirroring to position
     float3 pos = T + QuaternionApply(R, gOffset) * k;
@@ -340,13 +362,11 @@ void MapGaussiansToFaces(uint3 id : SV_DispatchThreadID)
     pos.x *= -1; // Mirror position along x-axis
     //  TODO handle a little offset
     // pos.x -= -0.006;
-    tempBuffer[id.x] = pos;
+    SplatPosOutput.Store3(id.x * 12, asuint(pos));
 
-
-    UpdatedScalingBuffer[id.x] =  data.scaling;
-    UpdatedXyzBuffer[id.x] = pos;
-    UpdatedRotationBuffer[id.x] = rot;
-    GaussianDataBuffer[id.x] = data;
+    float4 normalizedRot = normalize(float4(rot.y, rot.z, rot.w, rot.x));
+    float4 packedRot = PackSmallest3Rotation(normalizedRot);
+    SplatOtherOutput.Store(id.x * _SplatOtherStride, EncodeQuatToNorm10(packedRot));
 
     
 

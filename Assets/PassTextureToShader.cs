@@ -5,6 +5,7 @@ public class PassMeshTextureToSplats : MonoBehaviour
 {
     [SerializeField]public Renderer meshRenderer; // Assign your mesh's renderer in the Inspector
     [SerializeField]public Material splatsMaterial; // Assign your splats shader material in the Inspector
+    [SerializeField] public bool warnIfMissing = false;
 
     void Start()
     {
@@ -20,12 +21,12 @@ public class PassMeshTextureToSplats : MonoBehaviour
                 splatsMaterial.SetTexture("_UVTex", meshTexture);
                 Debug.Log("Texture passed to splats shader.");
             }
-            else
+            else if (warnIfMissing)
             {
                 Debug.LogWarning("Splats material or texture is missing.");
             }
         }
-        else
+        else if (warnIfMissing)
         {
             Debug.LogWarning("Mesh renderer or material is missing.");
         }
