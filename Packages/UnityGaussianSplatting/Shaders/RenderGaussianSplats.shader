@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MIT
 Shader "Gaussian Splatting/Render Splats"
 {
+    Properties
+    {
+        _GaussianSceneZTest ("Scene ZTest", Float) = 4
+    }
+
     SubShader
     {
         Tags { "RenderType"="Transparent" "Queue"="Transparent" }
@@ -8,6 +13,7 @@ Shader "Gaussian Splatting/Render Splats"
         Pass
         {
             ZWrite Off
+            ZTest [_GaussianSceneZTest]
             Blend OneMinusDstAlpha		 One
             Cull Off
 			

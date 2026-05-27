@@ -23,6 +23,8 @@ namespace GaussianSplatting.Editor
         SerializedProperty m_PropAsset;
         SerializedProperty m_PropSplatScale;
         SerializedProperty m_PropOpacityScale;
+        SerializedProperty m_PropOccludeSceneObjects;
+        SerializedProperty m_PropOcclusionAlphaThreshold;
         SerializedProperty m_PropSHOrder;
         SerializedProperty m_PropSHOnly;
         SerializedProperty m_PropDCOnly;
@@ -33,6 +35,7 @@ namespace GaussianSplatting.Editor
         SerializedProperty m_PropCutouts;
         SerializedProperty m_PropShaderSplats;
         SerializedProperty m_PropShaderComposite;
+        SerializedProperty m_PropShaderDepthMask;
         SerializedProperty m_PropShaderDebugPoints;
         SerializedProperty m_PropShaderDebugBoxes;
         SerializedProperty m_PropCSSplatUtilities;
@@ -64,6 +67,8 @@ namespace GaussianSplatting.Editor
             m_PropAsset = serializedObject.FindProperty("m_Asset");
             m_PropSplatScale = serializedObject.FindProperty("m_SplatScale");
             m_PropOpacityScale = serializedObject.FindProperty("m_OpacityScale");
+            m_PropOccludeSceneObjects = serializedObject.FindProperty("m_OccludeSceneObjects");
+            m_PropOcclusionAlphaThreshold = serializedObject.FindProperty("m_OcclusionAlphaThreshold");
             m_PropSHOrder = serializedObject.FindProperty("m_SHOrder");
             m_PropSHOnly = serializedObject.FindProperty("m_SHOnly");
             m_PropSortNthFrame = serializedObject.FindProperty("m_SortNthFrame");
@@ -72,6 +77,7 @@ namespace GaussianSplatting.Editor
             m_PropCutouts = serializedObject.FindProperty("m_Cutouts");
             m_PropShaderSplats = serializedObject.FindProperty("m_ShaderSplats");
             m_PropShaderComposite = serializedObject.FindProperty("m_ShaderComposite");
+            m_PropShaderDepthMask = serializedObject.FindProperty("m_ShaderDepthMask");
             m_PropShaderDebugPoints = serializedObject.FindProperty("m_ShaderDebugPoints");
             m_PropShaderDebugBoxes = serializedObject.FindProperty("m_ShaderDebugBoxes");
             m_PropCSSplatUtilities = serializedObject.FindProperty("m_CSSplatUtilities");
@@ -107,6 +113,9 @@ namespace GaussianSplatting.Editor
             GUILayout.Label("Render Options", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(m_PropSplatScale);
             EditorGUILayout.PropertyField(m_PropOpacityScale);
+            EditorGUILayout.PropertyField(m_PropOccludeSceneObjects);
+            if (m_PropOccludeSceneObjects.boolValue)
+                EditorGUILayout.PropertyField(m_PropOcclusionAlphaThreshold);
             EditorGUILayout.PropertyField(m_PropSHOrder);
             EditorGUILayout.PropertyField(m_PropSHOnly);
             EditorGUILayout.PropertyField(m_PropDCOnly);
@@ -125,6 +134,7 @@ namespace GaussianSplatting.Editor
             {
                 EditorGUILayout.PropertyField(m_PropShaderSplats);
                 EditorGUILayout.PropertyField(m_PropShaderComposite);
+                EditorGUILayout.PropertyField(m_PropShaderDepthMask);
                 EditorGUILayout.PropertyField(m_PropShaderDebugPoints);
                 EditorGUILayout.PropertyField(m_PropShaderDebugBoxes);
                 EditorGUILayout.PropertyField(m_PropCSSplatUtilities);

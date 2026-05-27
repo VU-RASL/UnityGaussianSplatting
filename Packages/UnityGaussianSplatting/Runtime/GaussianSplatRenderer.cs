@@ -18,6 +18,7 @@ namespace GaussianSplatting.Runtime
     {
         // ReSharper disable MemberCanBePrivate.Global - used by HDRP/URP features that are not always compiled
         internal static readonly ProfilerMarker s_ProfDraw = new(ProfilerCategory.Render, "GaussianSplat.Draw", MarkerFlags.SampleGPU);
+        internal static readonly ProfilerMarker s_ProfDepthMask = new(ProfilerCategory.Render, "GaussianSplat.DepthMask", MarkerFlags.SampleGPU);
         internal static readonly ProfilerMarker s_ProfCompose = new(ProfilerCategory.Render, "GaussianSplat.Compose", MarkerFlags.SampleGPU);
         internal static readonly ProfilerMarker s_ProfCalcView = new(ProfilerCategory.Render, "GaussianSplat.CalcView", MarkerFlags.SampleGPU);
         // ReSharper restore MemberCanBePrivate.Global
@@ -30,6 +31,7 @@ namespace GaussianSplatting.Runtime
         readonly List<(GaussianSplatRenderer, MaterialPropertyBlock)> m_ActiveSplats = new();
 
         CommandBuffer m_CommandBuffer;
+        CommandBuffer m_DepthMaskCommandBuffer;
 
         public void RegisterSplat(GaussianSplatRenderer r)
         {
@@ -56,7 +58,11 @@ namespace GaussianSplatting.Runtime
                         foreach (var cam in m_CameraCommandBuffersDone)
                         {
                             if (cam)
+                            {
+                                if (m_DepthMaskCommandBuffer != null)
+                                    cam.RemoveCommandBuffer(CameraEvent.BeforeForwardOpaque, m_DepthMaskCommandBuffer);
                                 cam.RemoveCommandBuffer(CameraEvent.BeforeForwardAlpha, m_CommandBuffer);
+                            }
                         }
                     }
                     m_CameraCommandBuffersDone.Clear();
@@ -65,6 +71,8 @@ namespace GaussianSplatting.Runtime
                 m_ActiveSplats.Clear();
                 m_CommandBuffer?.Dispose();
                 m_CommandBuffer = null;
+                m_DepthMaskCommandBuffer?.Dispose();
+                m_DepthMaskCommandBuffer = null;
                 Camera.onPreCull -= OnPreCullCamera;
             }
         }
@@ -130,6 +138,8 @@ namespace GaussianSplatting.Runtime
                 };
                 if (displayMat == null)
                     continue;
+                displayMat.SetInt(GaussianSplatRenderer.Props.GaussianSceneZTest,
+                    gs.m_OccludeSceneObjects ? (int)CompareFunction.Always : (int)CompareFunction.LessEqual);
                         // Use updated buffer if available
                 if (gs.updatedPositionsBuffer != null)
                 {
@@ -194,19 +204,50 @@ namespace GaussianSplatting.Runtime
             return matComposite;
         }
 
+        void RenderDepthMasks(Camera cam, CommandBuffer cmb)
+        {
+            foreach (var kvp in m_ActiveSplats)
+            {
+                var gs = kvp.Item1;
+                if (!gs.m_OccludeSceneObjects || gs.m_MatDepthMask == null)
+                    continue;
+
+                var matrix = gs.transform.localToWorldMatrix;
+                var mpb = kvp.Item2;
+                mpb.Clear();
+
+                gs.SetAssetDataOnMaterial(mpb);
+                mpb.SetBuffer(GaussianSplatRenderer.Props.SplatViewData, gs.m_GpuView);
+                mpb.SetBuffer(GaussianSplatRenderer.Props.OrderBuffer, gs.m_GpuSortKeys);
+                float alphaThreshold = gs.m_OcclusionAlphaThreshold < 0.02f ? 0.12f : gs.m_OcclusionAlphaThreshold;
+                mpb.SetFloat(GaussianSplatRenderer.Props.DepthMaskAlphaThreshold, alphaThreshold);
+
+                cmb.BeginSample(s_ProfCalcView);
+                gs.CalcViewData(cmb, cam, matrix);
+                cmb.EndSample(s_ProfCalcView);
+
+                cmb.BeginSample(s_ProfDepthMask);
+                cmb.DrawProcedural(gs.m_GpuIndexBuffer, matrix, gs.m_MatDepthMask, 0, MeshTopology.Triangles, 6, gs.splatCount, mpb);
+                cmb.EndSample(s_ProfDepthMask);
+            }
+        }
+
         // ReSharper disable once MemberCanBePrivate.Global - used by HDRP/URP features that are not always compiled
         // ReSharper disable once UnusedMethodReturnValue.Global - used by HDRP/URP features that are not always compiled
         public CommandBuffer InitialClearCmdBuffer(Camera cam)
         {
             m_CommandBuffer ??= new CommandBuffer {name = "RenderGaussianSplats"};
+            m_DepthMaskCommandBuffer ??= new CommandBuffer { name = "RenderGaussianSplatDepthMask" };
             if (GraphicsSettings.currentRenderPipeline == null && cam != null && !m_CameraCommandBuffersDone.Contains(cam))
             {
+                cam.AddCommandBuffer(CameraEvent.BeforeForwardOpaque, m_DepthMaskCommandBuffer);
                 cam.AddCommandBuffer(CameraEvent.BeforeForwardAlpha, m_CommandBuffer);
                 m_CameraCommandBuffersDone.Add(cam);
             }
 
             // get render target for all splats
             m_CommandBuffer.Clear();
+            m_DepthMaskCommandBuffer.Clear();
             return m_CommandBuffer;
         }
 
@@ -216,6 +257,8 @@ namespace GaussianSplatting.Runtime
                 return;
 
             InitialClearCmdBuffer(cam);
+
+            RenderDepthMasks(cam, m_DepthMaskCommandBuffer);
 
             m_CommandBuffer.GetTemporaryRT(GaussianSplatRenderer.Props.GaussianSplatRT, -1, -1, 0, FilterMode.Point, GraphicsFormat.R16G16B16A16_SFloat);
             m_CommandBuffer.SetRenderTarget(GaussianSplatRenderer.Props.GaussianSplatRT, BuiltinRenderTextureType.CurrentActive);
@@ -264,6 +307,10 @@ namespace GaussianSplatting.Runtime
         // [Range(0.05f, 20.0f)]
         // [Tooltip("Additional scaling factor for opacity")]
         public float m_OpacityScale = 1.0f;
+        [Tooltip("Render an invisible Gaussian depth mask before opaque scene objects so meshes behind the avatar are hidden without changing the Gaussian color pass.")]
+        public bool m_OccludeSceneObjects = true;
+        [Range(0.02f, 0.5f)]
+        public float m_OcclusionAlphaThreshold = 0.12f;
         [Range(0, 3)] [Tooltip("Spherical Harmonics order to use")]
         public int m_SHOrder = 3;
 
@@ -283,6 +330,7 @@ namespace GaussianSplatting.Runtime
 
         public Shader m_ShaderSplats;
         public Shader m_ShaderComposite;
+        public Shader m_ShaderDepthMask;
         public Shader m_ShaderDebugPoints;
         public Shader m_ShaderDebugBoxes;
         [Tooltip("Gaussian splatting compute shader")]
@@ -317,6 +365,7 @@ namespace GaussianSplatting.Runtime
 
         internal Material m_MatSplats;
         internal Material m_MatComposite;
+        internal Material m_MatDepthMask;
         internal Material m_MatDebugPoints;
         internal Material m_MatDebugBoxes;
 
@@ -350,6 +399,8 @@ namespace GaussianSplatting.Runtime
             public static readonly int DisplayIndex = Shader.PropertyToID("_DisplayIndex");
             public static readonly int DisplayChunks = Shader.PropertyToID("_DisplayChunks");
             public static readonly int GaussianSplatRT = Shader.PropertyToID("_GaussianSplatRT");
+            public static readonly int DepthMaskAlphaThreshold = Shader.PropertyToID("_DepthMaskAlphaThreshold");
+            public static readonly int GaussianSceneZTest = Shader.PropertyToID("_GaussianSceneZTest");
             public static readonly int SplatSortKeys = Shader.PropertyToID("_SplatSortKeys");
             public static readonly int SplatSortDistances = Shader.PropertyToID("_SplatSortDistances");
             public static readonly int SrcBuffer = Shader.PropertyToID("_SrcBuffer");
@@ -508,6 +559,11 @@ namespace GaussianSplatting.Runtime
 
             m_MatSplats = new Material(m_ShaderSplats) {name = "GaussianSplats"};
             m_MatComposite = new Material(m_ShaderComposite) {name = "GaussianClearDstAlpha"};
+            Shader depthMaskShader = m_ShaderDepthMask != null ? m_ShaderDepthMask : Shader.Find("Hidden/Gaussian Splatting/Depth Mask");
+            if (depthMaskShader != null)
+            {
+                m_MatDepthMask = new Material(depthMaskShader) { name = "GaussianDepthMask" };
+            }
             m_MatDebugPoints = new Material(m_ShaderDebugPoints) {name = "GaussianDebugPoints"};
             m_MatDebugBoxes = new Material(m_ShaderDebugBoxes) {name = "GaussianDebugBoxes"};
 
@@ -615,6 +671,7 @@ namespace GaussianSplatting.Runtime
 
             DestroyImmediate(m_MatSplats);
             DestroyImmediate(m_MatComposite);
+            DestroyImmediate(m_MatDepthMask);
             DestroyImmediate(m_MatDebugPoints);
             DestroyImmediate(m_MatDebugBoxes);
         }
