@@ -54,7 +54,7 @@ public class TestShaderWithBuffer : MonoBehaviour
             return;
         }
 
-        assetCreator = new GaussianSplatAssetCreator();
+        assetCreator = ScriptableObject.CreateInstance<GaussianSplatAssetCreator>();
 
         if (gaussianRenderer == null)
         {

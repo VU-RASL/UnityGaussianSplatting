@@ -10,13 +10,18 @@ public class PoseController : MonoBehaviour
 
 
     [SerializeField] public SMPLX smplx; // Reference to the SMPL-X model
+    public bool using_custom = false;
     public float poseSwitchTime = 3f;   // Time in seconds to switch poses
+    public float[] customPose;
     // public Material smplxMaterial;     // Assign the material with your custom shader
 
     public ComputeBuffer vertexBuffer; // GPU buffer to store vertex positions
     private Transform[] joints;         // Array to store SMPL-X joint transforms
     private bool isTPose = true;        // Toggle between poses
     private SkinnedMeshRenderer smr;    // Reference to SkinnedMeshRenderer
+    private Animator smplxAnimator;
+    private Coroutine customPoseCoroutine;
+    private bool previousUsingCustom;
     [SerializeField] public HahaImporter hahaImporter;
 
     public int3[] faces;
@@ -70,6 +75,7 @@ public class PoseController : MonoBehaviour
         // Get the SkinnedMeshRenderer component
         Mesh bakedMesh = new Mesh();
         smr = smplx.GetComponentInChildren<SkinnedMeshRenderer>();
+        smplxAnimator = smplx.GetComponentInChildren<Animator>();
         if (smr == null)
         {
             Debug.LogError("SkinnedMeshRenderer not found on SMPLX object!");
@@ -85,11 +91,13 @@ public class PoseController : MonoBehaviour
         // smplx.SetBodyPose(SMPLX.BodyPose.T);
         UpdateVertexBuffer();
         // GetBuffers();
-        
-        
-        // Start the pose animation loop
-        StartCoroutine(AnimatePose());
-        
+
+        previousUsingCustom = using_custom;
+        SetAnimatorDrivenMode(!using_custom);
+        if (using_custom)
+        {
+            customPoseCoroutine = StartCoroutine(AnimatePose());
+        }
     }
 
     void GetBuffers()
@@ -113,9 +121,31 @@ public class PoseController : MonoBehaviour
         haha_scalingBuffer.GetData(scales);
     }
 
-    void Update(){
-        Debug.Log("Update");
-        // UpdateVertexBuffer();
+    void Update()
+    {
+        if (using_custom == previousUsingCustom)
+        {
+            return;
+        }
+
+        previousUsingCustom = using_custom;
+        SetAnimatorDrivenMode(!using_custom);
+
+        if (customPoseCoroutine != null)
+        {
+            StopCoroutine(customPoseCoroutine);
+            customPoseCoroutine = null;
+        }
+
+        if (using_custom)
+        {
+            customPoseCoroutine = StartCoroutine(AnimatePose());
+        }
+    }
+
+    void LateUpdate()
+    {
+        UpdateVertexBuffer();
     }
     void InitializeJoints()
     {
@@ -160,36 +190,13 @@ public class PoseController : MonoBehaviour
 
     System.Collections.IEnumerator AnimatePose()
     {
-        
-        int key =1;
         while (true)
         {
-            
-            // if (key == 1)
-            // {
-            //     smplx.SetBodyPose(SMPLX.BodyPose.T);
-            //     // ApplyCustomPose(GenerateRandomPose()); // Apply a random pose
-            //     key = key +1;
-            // }
-            // else if (key == 2){
-            //     smplx.SetBodyPose(SMPLX.BodyPose.A);
-            //     key = key +1;
-            // }
-            // else if (key == 3){
-            //     smplx.SetBodyPose(SMPLX.BodyPose.S);
-            //     key = 1;
-            // }
-            // else if (key == 4)
-            // {
-            //     smplx.SetBodyPose(SMPLX.BodyPose.S);
-            //     key = 1;
-            // }
-
-            // Update the GPU vertex buffer with the baked mesh data
-            UpdateVertexBuffer();
+            ApplyCustomPose(GetCustomPose());
 
             isTPose = !isTPose; // Toggle pose state
-            yield return new WaitForSeconds(poseSwitchTime);
+            float delay = poseSwitchTime > 0.0f ? poseSwitchTime : 1.0f;
+            yield return new WaitForSeconds(delay);
         }
     }
 
@@ -202,9 +209,55 @@ public class PoseController : MonoBehaviour
         Debug.Log("Applied T-pose to SMPL-X.");
     }
 
-    void ApplyCustomPose(float[] customPose)
+    float[] GetCustomPose()
     {
-        if (customPose.Length != joints.Length * 3)
+        if (customPose != null && customPose.Length == joints.Length * 3)
+        {
+            return customPose;
+        }
+
+        return GenerateCustomPose(isTPose);
+    }
+
+    float[] GenerateCustomPose(bool tPose)
+    {
+        float[] pose = new float[joints.Length * 3];
+        if (tPose)
+        {
+            return pose;
+        }
+
+        SetCustomJointEuler(pose, "left_collar", new Vector3(0.0f, 0.0f, 10.0f));
+        SetCustomJointEuler(pose, "left_shoulder", new Vector3(0.0f, 0.0f, 35.0f));
+        SetCustomJointEuler(pose, "right_collar", new Vector3(0.0f, 0.0f, -10.0f));
+        SetCustomJointEuler(pose, "right_shoulder", new Vector3(0.0f, 0.0f, -35.0f));
+        return pose;
+    }
+
+    void SetCustomJointEuler(float[] pose, string jointName, Vector3 eulerAngles)
+    {
+        for (int i = 0; i < joints.Length; i++)
+        {
+            if (joints[i].name != jointName)
+            {
+                continue;
+            }
+
+            pose[i * 3 + 0] = eulerAngles.x;
+            pose[i * 3 + 1] = eulerAngles.y;
+            pose[i * 3 + 2] = eulerAngles.z;
+            return;
+        }
+    }
+
+    public void SetCustomPose(float[] pose)
+    {
+        customPose = pose;
+    }
+
+    public void ApplyCustomPose(float[] customPose)
+    {
+        if (customPose == null || customPose.Length != joints.Length * 3)
         {
             Debug.LogError($"Invalid custom pose array! Expected {joints.Length * 3} values.");
             return;
@@ -221,7 +274,22 @@ public class PoseController : MonoBehaviour
 
             joints[i].localEulerAngles = rotation; // Apply rotation
         }
+        smplx.UpdatePoseCorrectives();
+        smplx.UpdateJointPositions(false);
         Debug.Log("Applied custom pose to SMPL-X.");
+    }
+
+    void SetAnimatorDrivenMode(bool animatorDriven)
+    {
+        if (smplxAnimator != null)
+        {
+            smplxAnimator.enabled = animatorDriven;
+        }
+
+        if (!animatorDriven)
+        {
+            smplx.ResetBodyPose();
+        }
     }
 
     // float[] GenerateRandomPose()
