@@ -721,7 +721,7 @@ public class SMPLX_Editor : Editor {
                             {
                                 EditorGUILayout.BeginHorizontal();
                                 EditorGUILayout.LabelField("Exp " + i, GUILayout.Width(50));
-                                _target.expressions[i] = EditorGUILayout.Slider(_target.expressions[i], -2, 2);
+                                _target.expressions[i] = EditorGUILayout.Slider(_target.expressions[i], -20, 20);
                                 EditorGUILayout.EndHorizontal();
                             }
                         }
@@ -745,6 +745,14 @@ public class SMPLX_Editor : Editor {
                                 for (int i=0; i<SMPLX.NUM_EXPRESSIONS; i++)
                                 {
                                     _target.expressions[i] = 0.0f;
+                                }
+                                _target.SetExpressions();
+                            }
+                            if (GUILayout.Button("Smile"))
+                            {
+                                for (int i=0; i<SMPLX.NUM_EXPRESSIONS; i++)
+                                {
+                                    _target.expressions[i] = Random.Range(-2.0f, 2.0f);
                                 }
                                 _target.SetExpressions();
                             }
