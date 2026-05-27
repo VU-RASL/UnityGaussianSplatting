@@ -40,6 +40,7 @@ public class PoseController : MonoBehaviour
     private float initialAnimatorSpeed = 1.0f;
     private bool previousUsingCustom;
     private bool previousVisualableMesh;
+    private Mesh bakedMesh;
     private Vector3 initialSmplxLocalPosition;
     private Quaternion initialSmplxLocalRotation;
     private Vector3 initialSmplxLocalScale;
@@ -104,6 +105,7 @@ public class PoseController : MonoBehaviour
             Debug.LogError("SkinnedMeshRenderer not found on SMPLX object!");
             return;
         }
+        bakedMesh = new Mesh { name = "PoseControllerBakedMesh" };
         CacheInitialTransforms();
         InitializeAnimator();
 
@@ -454,8 +456,6 @@ public class PoseController : MonoBehaviour
             return;
         }
 
-        // Bake the updated mesh
-        Mesh bakedMesh = new Mesh();
         smr.BakeMesh(bakedMesh);
 
 
@@ -557,6 +557,11 @@ public class PoseController : MonoBehaviour
         {
             haha_rotationBuffer.Dispose();
             haha_rotationBuffer = null;
+        }
+        if (bakedMesh != null)
+        {
+            Destroy(bakedMesh);
+            bakedMesh = null;
         }
 
     }
