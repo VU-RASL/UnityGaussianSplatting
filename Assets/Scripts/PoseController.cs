@@ -11,6 +11,7 @@ public class PoseController : MonoBehaviour
 
     [SerializeField] public SMPLX smplx; // Reference to the SMPL-X model
     public bool using_custom = false;
+    public bool visualable_mesh = true;
     public float poseSwitchTime = 3f;   // Time in seconds to switch poses
     public float[] customPose;
     // public Material smplxMaterial;     // Assign the material with your custom shader
@@ -22,6 +23,7 @@ public class PoseController : MonoBehaviour
     private Animator smplxAnimator;
     private Coroutine customPoseCoroutine;
     private bool previousUsingCustom;
+    private bool previousVisualableMesh;
     [SerializeField] public HahaImporter hahaImporter;
 
     public int3[] faces;
@@ -73,7 +75,6 @@ public class PoseController : MonoBehaviour
         // }
 
         // Get the SkinnedMeshRenderer component
-        Mesh bakedMesh = new Mesh();
         smr = smplx.GetComponentInChildren<SkinnedMeshRenderer>();
         smplxAnimator = smplx.GetComponentInChildren<Animator>();
         if (smr == null)
@@ -93,6 +94,8 @@ public class PoseController : MonoBehaviour
         // GetBuffers();
 
         previousUsingCustom = using_custom;
+        previousVisualableMesh = visualable_mesh;
+        ApplyMeshVisibility();
         SetAnimatorDrivenMode(!using_custom);
         if (using_custom)
         {
@@ -123,6 +126,12 @@ public class PoseController : MonoBehaviour
 
     void Update()
     {
+        if (visualable_mesh != previousVisualableMesh)
+        {
+            previousVisualableMesh = visualable_mesh;
+            ApplyMeshVisibility();
+        }
+
         if (using_custom == previousUsingCustom)
         {
             return;
@@ -284,12 +293,25 @@ public class PoseController : MonoBehaviour
         if (smplxAnimator != null)
         {
             smplxAnimator.enabled = animatorDriven;
+            smplxAnimator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
         }
 
         if (!animatorDriven)
         {
             smplx.ResetBodyPose();
         }
+    }
+
+    void ApplyMeshVisibility()
+    {
+        if (smr == null)
+        {
+            return;
+        }
+
+        smr.enabled = true;
+        smr.updateWhenOffscreen = true;
+        smr.forceRenderingOff = !visualable_mesh;
     }
 
     // float[] GenerateRandomPose()
