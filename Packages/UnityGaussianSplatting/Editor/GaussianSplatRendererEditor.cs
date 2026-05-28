@@ -25,6 +25,7 @@ namespace GaussianSplatting.Editor
         SerializedProperty m_PropOpacityScale;
         SerializedProperty m_PropOccludeSceneObjects;
         SerializedProperty m_PropOcclusionAlphaThreshold;
+        SerializedProperty m_PropOcclusionEdgeShrinkPixels;
         SerializedProperty m_PropSHOrder;
         SerializedProperty m_PropSHOnly;
         SerializedProperty m_PropDCOnly;
@@ -69,6 +70,7 @@ namespace GaussianSplatting.Editor
             m_PropOpacityScale = serializedObject.FindProperty("m_OpacityScale");
             m_PropOccludeSceneObjects = serializedObject.FindProperty("m_OccludeSceneObjects");
             m_PropOcclusionAlphaThreshold = serializedObject.FindProperty("m_OcclusionAlphaThreshold");
+            m_PropOcclusionEdgeShrinkPixels = serializedObject.FindProperty("m_OcclusionEdgeShrinkPixels");
             m_PropSHOrder = serializedObject.FindProperty("m_SHOrder");
             m_PropSHOnly = serializedObject.FindProperty("m_SHOnly");
             m_PropSortNthFrame = serializedObject.FindProperty("m_SortNthFrame");
@@ -115,7 +117,10 @@ namespace GaussianSplatting.Editor
             EditorGUILayout.PropertyField(m_PropOpacityScale);
             EditorGUILayout.PropertyField(m_PropOccludeSceneObjects);
             if (m_PropOccludeSceneObjects.boolValue)
+            {
                 EditorGUILayout.PropertyField(m_PropOcclusionAlphaThreshold);
+                EditorGUILayout.PropertyField(m_PropOcclusionEdgeShrinkPixels);
+            }
             EditorGUILayout.PropertyField(m_PropSHOrder);
             EditorGUILayout.PropertyField(m_PropSHOnly);
             EditorGUILayout.PropertyField(m_PropDCOnly);

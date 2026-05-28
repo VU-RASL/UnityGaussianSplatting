@@ -221,13 +221,23 @@ namespace GaussianSplatting.Runtime
                 mpb.SetBuffer(GaussianSplatRenderer.Props.OrderBuffer, gs.m_GpuSortKeys);
                 float alphaThreshold = gs.m_OcclusionAlphaThreshold < 0.02f ? 0.12f : gs.m_OcclusionAlphaThreshold;
                 mpb.SetFloat(GaussianSplatRenderer.Props.DepthMaskAlphaThreshold, alphaThreshold);
+                mpb.SetFloat(GaussianSplatRenderer.Props.DepthMaskLocalAlphaEpsilon, 1.0f / 255.0f);
+                mpb.SetFloat(GaussianSplatRenderer.Props.DepthMaskEdgeShrinkPixels, gs.m_OcclusionEdgeShrinkPixels);
 
                 cmb.BeginSample(s_ProfCalcView);
                 gs.CalcViewData(cmb, cam, matrix);
                 cmb.EndSample(s_ProfCalcView);
 
                 cmb.BeginSample(s_ProfDepthMask);
+                cmb.GetTemporaryRT(GaussianSplatRenderer.Props.GaussianDepthCoverageRT, -1, -1, 0, FilterMode.Bilinear, GraphicsFormat.R16G16B16A16_SFloat);
+                cmb.SetRenderTarget(GaussianSplatRenderer.Props.GaussianDepthCoverageRT);
+                cmb.ClearRenderTarget(RTClearFlags.Color, new Color(0, 0, 0, 0), 0, 0);
                 cmb.DrawProcedural(gs.m_GpuIndexBuffer, matrix, gs.m_MatDepthMask, 0, MeshTopology.Triangles, 6, gs.splatCount, mpb);
+
+                cmb.SetGlobalTexture(GaussianSplatRenderer.Props.GaussianDepthCoverageRT, new RenderTargetIdentifier(GaussianSplatRenderer.Props.GaussianDepthCoverageRT));
+                cmb.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+                cmb.DrawProcedural(gs.m_GpuIndexBuffer, matrix, gs.m_MatDepthMask, 1, MeshTopology.Triangles, 6, gs.splatCount, mpb);
+                cmb.ReleaseTemporaryRT(GaussianSplatRenderer.Props.GaussianDepthCoverageRT);
                 cmb.EndSample(s_ProfDepthMask);
             }
         }
@@ -311,6 +321,8 @@ namespace GaussianSplatting.Runtime
         public bool m_OccludeSceneObjects = true;
         [Range(0.02f, 0.5f)]
         public float m_OcclusionAlphaThreshold = 0.12f;
+        [Range(0.0f, 2.0f)]
+        public float m_OcclusionEdgeShrinkPixels = 1.0f;
         [Range(0, 3)] [Tooltip("Spherical Harmonics order to use")]
         public int m_SHOrder = 3;
 
@@ -399,7 +411,10 @@ namespace GaussianSplatting.Runtime
             public static readonly int DisplayIndex = Shader.PropertyToID("_DisplayIndex");
             public static readonly int DisplayChunks = Shader.PropertyToID("_DisplayChunks");
             public static readonly int GaussianSplatRT = Shader.PropertyToID("_GaussianSplatRT");
+            public static readonly int GaussianDepthCoverageRT = Shader.PropertyToID("_GaussianDepthCoverageRT");
             public static readonly int DepthMaskAlphaThreshold = Shader.PropertyToID("_DepthMaskAlphaThreshold");
+            public static readonly int DepthMaskLocalAlphaEpsilon = Shader.PropertyToID("_DepthMaskLocalAlphaEpsilon");
+            public static readonly int DepthMaskEdgeShrinkPixels = Shader.PropertyToID("_DepthMaskEdgeShrinkPixels");
             public static readonly int GaussianSceneZTest = Shader.PropertyToID("_GaussianSceneZTest");
             public static readonly int SplatSortKeys = Shader.PropertyToID("_SplatSortKeys");
             public static readonly int SplatSortDistances = Shader.PropertyToID("_SplatSortDistances");
