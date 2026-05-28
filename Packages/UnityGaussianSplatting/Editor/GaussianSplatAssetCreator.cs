@@ -583,7 +583,6 @@ namespace GaussianSplatting.Editor
                
                
                 // scale
-                splat.scale = splat.scale;
                 // splat.scale = GaussianUtils.LinearScale(splat.scale);
 
                 // color
@@ -591,7 +590,6 @@ namespace GaussianSplatting.Editor
                 // splat.dc0.y = Mathf.Clamp(splat.dc0.y, 0f, 1f);
                 // splat.dc0.z = Mathf.Clamp(splat.dc0.z, 0f, 1f);
 
-                splat.dc0 =splat.dc0;
                 splat.opacity = GaussianUtils.Sigmoid(splat.opacity);
 
                 splatData[index] = splat;
