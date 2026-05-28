@@ -3,6 +3,7 @@ using System.IO;
 using Newtonsoft.Json;
 using UnityEngine;
 using Unity.Mathematics;
+using System.Collections.Generic;
 
 
 // namespace GSAvatar.Runtime
@@ -10,29 +11,85 @@ using Unity.Mathematics;
 [ExecuteInEditMode]
 public class HahaImporter : MonoBehaviour
 {
-    public string path = "Assets/HahaData/state_dict.json";
-    public string texSavePath = "Assets/HahaData/extracted_texture.png";
-    public string gaussianToFaceSavePath = "Assets/HahaData/GaussianToFace.txt";
-    public string colorsSavePath = "Assets/HahaData/Colors.txt";
+    public string objectName = "male3";
+    [SerializeField, HideInInspector] string dataFolder = "Assets/HahaData";
+    [SerializeField, HideInInspector] string filePrefix = "state_dict_";
+    [SerializeField, HideInInspector] string fileExtension = ".json";
+    [SerializeField, HideInInspector] string texSavePath = "Assets/HahaData/extracted_texture.png";
+    [SerializeField, HideInInspector] bool saveTextureToFile = false;
+    [SerializeField, HideInInspector] string gaussianToFaceSavePath = "Assets/HahaData/GaussianToFace.txt";
+    [SerializeField, HideInInspector] string colorsSavePath = "Assets/HahaData/Colors.txt";
 
+    [NonSerialized]
     public HahaAvatarData data;
 
      // GPU Buffers
+    [HideInInspector]
     public ComputeBuffer gaussianToFaceBuffer;
+    [HideInInspector]
     public ComputeBuffer haha_xyzBuffer;
+    [HideInInspector]
     public ComputeBuffer haha_scalingBuffer;
+    [HideInInspector]
     public ComputeBuffer faceBuffer;
+    [HideInInspector]
     public ComputeBuffer haha_rotationBuffer;
+
+    static readonly Dictionary<string, HahaAvatarData> s_DataCache = new Dictionary<string, HahaAvatarData>();
+    bool buffersInitialized;
+    string loadedFullPath;
 
     void Start()
     {
-        // Load data from the file
-        data = new HahaAvatarData(path, texSavePath);
-        
-        // Initialize GPU buffers   
-        InitializeBuffers();
+        EnsureLoaded();
         // ExportGaussianToFace();
         // ExportColors();
+    }
+
+    public bool EnsureLoaded()
+    {
+        string fullPath = Path.GetFullPath(GetJsonPath());
+        if (data == null || loadedFullPath != fullPath)
+        {
+            data = GetOrLoadData(fullPath);
+            loadedFullPath = fullPath;
+            buffersInitialized = false;
+        }
+
+        if (data == null)
+        {
+            return false;
+        }
+
+        if (saveTextureToFile && data.texture != null && !string.IsNullOrEmpty(texSavePath) && !File.Exists(texSavePath))
+        {
+            File.WriteAllBytes(texSavePath, data.texture.EncodeToPNG());
+        }
+
+        if (!buffersInitialized)
+        {
+            InitializeBuffers();
+        }
+
+        return buffersInitialized;
+    }
+
+    public string GetJsonPath()
+    {
+        string cleanObjectName = string.IsNullOrWhiteSpace(objectName) ? "male3" : objectName.Trim();
+        return Path.Combine(dataFolder, $"{filePrefix}{cleanObjectName}{fileExtension}");
+    }
+
+    static HahaAvatarData GetOrLoadData(string fullPath)
+    {
+        if (s_DataCache.TryGetValue(fullPath, out HahaAvatarData cachedData))
+        {
+            return cachedData;
+        }
+
+        HahaAvatarData loadedData = new HahaAvatarData(fullPath);
+        s_DataCache[fullPath] = loadedData;
+        return loadedData;
     }
 
     void ExportGaussianToFace()
@@ -85,6 +142,8 @@ public class HahaImporter : MonoBehaviour
     }
     void InitializeBuffers()
     {
+        ReleaseBuffers();
+
         if (data.gaussianToFace != null && data.gaussianToFace.Length > 0)
         {
             gaussianToFaceBuffer = new ComputeBuffer(data.gaussianToFace.Length, sizeof(int));
@@ -112,44 +171,67 @@ public class HahaImporter : MonoBehaviour
         // rotation
         haha_rotationBuffer = new ComputeBuffer(data.offsets.Length, sizeof(float) * 4);
         haha_rotationBuffer.SetData(data.rotations);
+
+        buffersInitialized = gaussianToFaceBuffer != null &&
+                             haha_xyzBuffer != null &&
+                             faceBuffer != null &&
+                             haha_scalingBuffer != null &&
+                             haha_rotationBuffer != null;
     }
 
     public ComputeBuffer GetHahaXyzBuffer()
     {
+        EnsureLoaded();
         return haha_xyzBuffer;
     }
 
     public ComputeBuffer GetGaussianToFaceBuffer()
     {
+        EnsureLoaded();
         return gaussianToFaceBuffer;
     }
 
     public ComputeBuffer GetFaceBuffer()
     {
+        EnsureLoaded();
         return faceBuffer;
     }
     public ComputeBuffer GetHahaScalingBuffer()
     {
+        EnsureLoaded();
         return haha_scalingBuffer;
     }
     public float3[] GetHAHAScaling()
     {
+        EnsureLoaded();
         return data.scaling;
     }
     public ComputeBuffer GetHahaRotationBuffer()
     {
+        EnsureLoaded();
         return haha_rotationBuffer;
     }
 
 
     void OnDestroy()
     {
-        // Release GPU buffers
+        ReleaseBuffers();
+    }
+
+    void ReleaseBuffers()
+    {
         gaussianToFaceBuffer?.Dispose();
         haha_scalingBuffer?.Dispose();
         haha_xyzBuffer?.Dispose();
         haha_rotationBuffer?.Dispose();
         faceBuffer?.Dispose();
+
+        gaussianToFaceBuffer = null;
+        haha_scalingBuffer = null;
+        haha_xyzBuffer = null;
+        haha_rotationBuffer = null;
+        faceBuffer = null;
+        buffersInitialized = false;
         // Debug.Log("Haha Importer Disposed GPU Buffers.");
     }
 }

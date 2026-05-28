@@ -63,7 +63,12 @@ public class PoseController : MonoBehaviour
 
     void Awake()
     {
-        
+        if (hahaImporter == null || !hahaImporter.EnsureLoaded())
+        {
+            Debug.LogError("HahaImporter is not assigned or failed to load avatar data.");
+            return;
+        }
+
         smplx.Awake();
         // Debug.Log(hahaImporter.data.betas);
         
