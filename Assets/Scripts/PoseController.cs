@@ -61,8 +61,34 @@ public class PoseController : MonoBehaviour
     ComputeBuffer haha_scalingBuffer;
     ComputeBuffer haha_rotationBuffer;
 
+    void Reset()
+    {
+        AutoAssignReferences();
+    }
+
+    void OnValidate()
+    {
+        AutoAssignReferences();
+    }
+
+    void AutoAssignReferences()
+    {
+        if (hahaImporter == null)
+        {
+            hahaImporter = GetComponent<HahaImporter>();
+        }
+
+        if (smplx == null)
+        {
+            Transform root = transform.parent != null ? transform.parent : transform;
+            smplx = root.GetComponentInChildren<SMPLX>();
+        }
+    }
+
     void Awake()
     {
+        AutoAssignReferences();
+
         if (hahaImporter == null || !hahaImporter.EnsureLoaded())
         {
             Debug.LogError("HahaImporter is not assigned or failed to load avatar data.");

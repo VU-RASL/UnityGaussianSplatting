@@ -33,8 +33,39 @@ public class TestShaderWithBuffer : MonoBehaviour
         public Vector3 scaling;   // Scaling vector (x, y, z)
         public float shIndex;
     }
+
+    void Reset()
+    {
+        AutoAssignReferences();
+    }
+
+    void OnValidate()
+    {
+        AutoAssignReferences();
+    }
+
+    void AutoAssignReferences()
+    {
+        if (hahaImporter == null)
+        {
+            hahaImporter = GetComponent<HahaImporter>();
+        }
+
+        if (poseController == null)
+        {
+            poseController = GetComponent<PoseController>();
+        }
+
+        if (gaussianRenderer == null)
+        {
+            gaussianRenderer = GetComponent<GaussianSplatRenderer>();
+        }
+    }
+
     void Start()
     {
+        AutoAssignReferences();
+
         if (hahaImporter == null || poseController == null)
         {
             Debug.LogError("HahaImporter or PoseController not assigned! Drag them in the Inspector.");
