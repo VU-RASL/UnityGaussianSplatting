@@ -44,6 +44,7 @@ struct v2f
 };
 
 StructuredBuffer<SplatViewData> _SplatViewData;
+float _GaussianSplatClipFlipY;
 
 v2f vert(uint vtxID : SV_VertexID, uint instID : SV_InstanceID)
 {
@@ -68,6 +69,8 @@ v2f vert(uint vtxID : SV_VertexID, uint instID : SV_InstanceID)
     float2 deltaScreenPos = (quadPos.x * view.axis1 + quadPos.y * view.axis2) * 2 / _ScreenParams.xy;
     o.vertex = centerClipPos;
     o.vertex.xy += deltaScreenPos * centerClipPos.w;
+    if (_GaussianSplatClipFlipY > 0.5)
+        o.vertex.y = -o.vertex.y;
     return o;
 }
 
@@ -86,6 +89,7 @@ ENDCG
             ZWrite On
             ZTest LEqual
             ColorMask 0
+            Blend Zero One
             Cull Off
             Offset 1, 1
 
@@ -117,6 +121,7 @@ sampler2D _GaussianDepthCoverageRT;
 float _DepthMaskAlphaThreshold;
 float _DepthMaskLocalAlphaEpsilon;
 float _DepthMaskEdgeShrinkPixels;
+float _GaussianSplatClipFlipY;
 
 v2f vert(uint vtxID : SV_VertexID, uint instID : SV_InstanceID)
 {
@@ -141,6 +146,8 @@ v2f vert(uint vtxID : SV_VertexID, uint instID : SV_InstanceID)
     float2 deltaScreenPos = (quadPos.x * view.axis1 + quadPos.y * view.axis2) * 2 / _ScreenParams.xy;
     o.vertex = centerClipPos;
     o.vertex.xy += deltaScreenPos * centerClipPos.w;
+    if (_GaussianSplatClipFlipY > 0.5)
+        o.vertex.y = -o.vertex.y;
     return o;
 }
 

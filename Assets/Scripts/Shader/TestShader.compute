@@ -238,7 +238,8 @@ float4 quaternion_multiply(float4 a, float4 b)
 [numthreads(64, 1, 1)]
 void CalcFacesTransform(uint3 id : SV_DispatchThreadID)
 {
-
+    if (id.x >= GaussianToFaceBuffer.Length)
+        return;
 
     // Load face vertex indices
     // int3 face = FaceBuffer[id.x];

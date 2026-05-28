@@ -174,6 +174,7 @@ namespace GaussianSplatting.Runtime
                 mpb.SetFloat(GaussianSplatRenderer.Props.SplatScale, gs.m_SplatScale);
                 mpb.SetFloat(GaussianSplatRenderer.Props.SplatOpacityScale, gs.m_OpacityScale);
                 mpb.SetFloat(GaussianSplatRenderer.Props.SplatSize, gs.m_PointDisplaySize);
+                mpb.SetFloat(GaussianSplatRenderer.Props.GaussianSplatClipFlipY, ShouldFlipSplatClipY(cam) ? 1.0f : 0.0f);
                 mpb.SetInteger(GaussianSplatRenderer.Props.SHOrder, gs.m_SHOrder);
                 mpb.SetInteger(GaussianSplatRenderer.Props.SHOnly, gs.m_SHOnly ? 1 : 0);
                 mpb.SetInteger(GaussianSplatRenderer.Props.DCOnly, gs.m_DCOnly ? 1 : 0);
@@ -223,6 +224,7 @@ namespace GaussianSplatting.Runtime
                 mpb.SetFloat(GaussianSplatRenderer.Props.DepthMaskAlphaThreshold, alphaThreshold);
                 mpb.SetFloat(GaussianSplatRenderer.Props.DepthMaskLocalAlphaEpsilon, 1.0f / 255.0f);
                 mpb.SetFloat(GaussianSplatRenderer.Props.DepthMaskEdgeShrinkPixels, gs.m_OcclusionEdgeShrinkPixels);
+                mpb.SetFloat(GaussianSplatRenderer.Props.GaussianSplatClipFlipY, ShouldFlipSplatClipY(cam) ? 1.0f : 0.0f);
 
                 cmb.BeginSample(s_ProfCalcView);
                 gs.CalcViewData(cmb, cam, matrix);
@@ -283,6 +285,20 @@ namespace GaussianSplatting.Runtime
             m_CommandBuffer.DrawProcedural(Matrix4x4.identity, matComposite, 0, MeshTopology.Triangles, 3, 1);
             m_CommandBuffer.EndSample(s_ProfCompose);
             m_CommandBuffer.ReleaseTemporaryRT(GaussianSplatRenderer.Props.GaussianSplatRT);
+        }
+
+        static bool ShouldFlipSplatClipY(Camera cam)
+        {
+            if (cam == null || cam.cameraType != CameraType.Game)
+                return false;
+
+#if UNITY_ANDROID
+            return true;
+#elif UNITY_EDITOR
+            return UnityEditor.EditorUserBuildSettings.activeBuildTarget == UnityEditor.BuildTarget.Android;
+#else
+            return false;
+#endif
         }
     }
 
@@ -411,6 +427,7 @@ namespace GaussianSplatting.Runtime
             public static readonly int DisplayIndex = Shader.PropertyToID("_DisplayIndex");
             public static readonly int DisplayChunks = Shader.PropertyToID("_DisplayChunks");
             public static readonly int GaussianSplatRT = Shader.PropertyToID("_GaussianSplatRT");
+            public static readonly int GaussianSplatClipFlipY = Shader.PropertyToID("_GaussianSplatClipFlipY");
             public static readonly int GaussianDepthCoverageRT = Shader.PropertyToID("_GaussianDepthCoverageRT");
             public static readonly int DepthMaskAlphaThreshold = Shader.PropertyToID("_DepthMaskAlphaThreshold");
             public static readonly int DepthMaskLocalAlphaEpsilon = Shader.PropertyToID("_DepthMaskLocalAlphaEpsilon");
@@ -789,7 +806,7 @@ namespace GaussianSplatting.Runtime
             cmd.SetComputeBufferParam(m_CSSplatUtilities, (int)KernelIndices.CalcDistances, Props.SplatSortDistances, m_GpuSortDistances);
             cmd.SetComputeBufferParam(m_CSSplatUtilities, (int)KernelIndices.CalcDistances, Props.SplatSortKeys, m_GpuSortKeys);
             cmd.SetComputeBufferParam(m_CSSplatUtilities, (int)KernelIndices.CalcDistances, Props.SplatChunks, m_GpuChunks);
-            cmd.SetComputeBufferParam(m_CSSplatUtilities, (int)KernelIndices.CalcDistances, Props.SplatPos, m_GpuPosData);
+            cmd.SetComputeBufferParam(m_CSSplatUtilities, (int)KernelIndices.CalcDistances, Props.SplatPos, updatedPositionsBuffer ?? m_GpuPosData);
             cmd.SetComputeIntParam(m_CSSplatUtilities, Props.SplatFormat, (int)m_Asset.posFormat);
             cmd.SetComputeMatrixParam(m_CSSplatUtilities, Props.MatrixMV, worldToCamMatrix * matrix);
             cmd.SetComputeIntParam(m_CSSplatUtilities, Props.SplatCount, m_SplatCount);
