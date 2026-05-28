@@ -600,6 +600,8 @@ namespace GaussianSplatting.Runtime
             m_MatDebugBoxes = new Material(m_ShaderDebugBoxes) {name = "GaussianDebugBoxes"};
 
             m_Sorter = new GpuSorting(m_CSSplatUtilities);
+            if (!m_Sorter.Valid)
+                Debug.LogWarning("Gaussian splat GPU sorter is not supported on this device; rendering splats in asset order.");
             GaussianSplatRenderSystem.instance.RegisterSplat(this);
 
             CreateResourcesForAsset();
@@ -794,6 +796,8 @@ namespace GaussianSplatting.Runtime
         internal void SortPoints(CommandBuffer cmd, Camera cam, Matrix4x4 matrix)
         {
             if (cam.cameraType == CameraType.Preview)
+                return;
+            if (!m_Sorter.Valid)
                 return;
 
             Matrix4x4 worldToCamMatrix = cam.worldToCameraMatrix;
