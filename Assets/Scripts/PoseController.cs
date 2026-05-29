@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using Unity.Mathematics;
 
+[DefaultExecutionOrder(50)]
 // [ExecuteInEditMode]
 public class PoseController : MonoBehaviour
 {   
@@ -34,13 +35,14 @@ public class PoseController : MonoBehaviour
     };
     private bool isTPose = true;        // Toggle between poses
     private SkinnedMeshRenderer smr;    // Reference to SkinnedMeshRenderer
-    private Animator smplxAnimator;
+    private Animator[] smplxAnimators;
     private Coroutine customPoseCoroutine;
     private float[] activeCustomPose;
     private float initialAnimatorSpeed = 1.0f;
     private bool previousUsingCustom;
     private bool previousVisualableMesh;
     private Mesh bakedMesh;
+    private Vector3[] currentVertices;
     private Vector3 initialSmplxLocalPosition;
     private Quaternion initialSmplxLocalRotation;
     private Vector3 initialSmplxLocalScale;
@@ -96,6 +98,12 @@ public class PoseController : MonoBehaviour
         }
 
         smplx.Awake();
+        if (using_custom)
+        {
+            CacheAnimators();
+            DisableAnimatorsForCustomPose();
+        }
+
         // Debug.Log(hahaImporter.data.betas);
         
 
@@ -130,7 +138,7 @@ public class PoseController : MonoBehaviour
 
         // Get the SkinnedMeshRenderer component
         smr = smplx.GetComponentInChildren<SkinnedMeshRenderer>();
-        smplxAnimator = smplx.GetComponentInChildren<Animator>();
+        CacheAnimators();
         if (smr == null)
         {
             Debug.LogError("SkinnedMeshRenderer not found on SMPLX object!");
@@ -146,18 +154,20 @@ public class PoseController : MonoBehaviour
         // Initialize the GPU vertex buffer
         InitializeVertexBuffer();
 
-        // smplx.SetBodyPose(SMPLX.BodyPose.T);
-        UpdateVertexBuffer();
-        // GetBuffers();
-
         previousUsingCustom = using_custom;
         previousVisualableMesh = visualable_mesh;
         ApplyMeshVisibility();
         SetAnimatorDrivenMode(!using_custom);
         if (using_custom)
         {
+            activeCustomPose = GetCustomPose();
+            ApplyCustomPose(activeCustomPose);
             customPoseCoroutine = StartCoroutine(AnimatePose());
         }
+
+        // smplx.SetBodyPose(SMPLX.BodyPose.T);
+        UpdateVertexBuffer();
+        // GetBuffers();
     }
 
     void GetBuffers()
@@ -213,6 +223,8 @@ public class PoseController : MonoBehaviour
     {
         if (using_custom)
         {
+            DisableAnimatorsForCustomPose();
+
             if (activeCustomPose == null)
             {
                 activeCustomPose = GetCustomPose();
@@ -382,17 +394,53 @@ public class PoseController : MonoBehaviour
         smplx.UpdateJointPositions(false);
     }
 
+    void CacheAnimators()
+    {
+        smplxAnimators = smplx != null ? smplx.GetComponentsInChildren<Animator>(true) : null;
+    }
+
     void SetAnimatorDrivenMode(bool animatorDriven)
     {
-        if (smplxAnimator != null)
+        if (smplxAnimators != null)
         {
-            smplxAnimator.enabled = true;
-            smplxAnimator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
-            smplxAnimator.applyRootMotion = false;
-            smplxAnimator.speed = animatorDriven ? initialAnimatorSpeed : 0.0f;
+            for (int i = 0; i < smplxAnimators.Length; ++i)
+            {
+                Animator animator = smplxAnimators[i];
+                if (animator == null)
+                {
+                    continue;
+                }
+
+                animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+                animator.applyRootMotion = false;
+                animator.speed = animatorDriven ? initialAnimatorSpeed : 0.0f;
+                animator.enabled = animatorDriven;
+            }
         }
 
         RestoreInitialTransforms();
+    }
+
+    void DisableAnimatorsForCustomPose()
+    {
+        if (smplxAnimators == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < smplxAnimators.Length; ++i)
+        {
+            Animator animator = smplxAnimators[i];
+            if (animator == null)
+            {
+                continue;
+            }
+
+            animator.speed = 0.0f;
+            animator.applyRootMotion = false;
+            animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+            animator.enabled = false;
+        }
     }
 
     void ApplyMeshVisibility()
@@ -435,19 +483,21 @@ public class PoseController : MonoBehaviour
 
     void InitializeAnimator()
     {
-        if (smplxAnimator == null)
+        if (smplxAnimators == null || smplxAnimators.Length == 0 || smplxAnimators[0] == null)
         {
             return;
         }
 
-        bool wasEnabled = smplxAnimator.enabled;
-        initialAnimatorSpeed = smplxAnimator.speed;
-        smplxAnimator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
-        smplxAnimator.applyRootMotion = false;
-        smplxAnimator.enabled = true;
-        smplxAnimator.Update(0.0f);
-        smplxAnimator.enabled = true;
-        smplxAnimator.speed = wasEnabled ? initialAnimatorSpeed : 0.0f;
+        Animator primaryAnimator = smplxAnimators[0];
+        bool wasEnabled = primaryAnimator.enabled;
+        initialAnimatorSpeed = primaryAnimator.speed;
+
+        primaryAnimator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+        primaryAnimator.applyRootMotion = false;
+        primaryAnimator.enabled = true;
+        primaryAnimator.Update(0.0f);
+        primaryAnimator.speed = wasEnabled ? initialAnimatorSpeed : 0.0f;
+        primaryAnimator.enabled = !using_custom && wasEnabled;
         RestoreInitialTransforms();
     }
 
@@ -487,6 +537,7 @@ public class PoseController : MonoBehaviour
             return;
         }
 
+        smr.updateWhenOffscreen = true;
         smr.BakeMesh(bakedMesh);
 
 
@@ -498,6 +549,7 @@ public class PoseController : MonoBehaviour
             // vertices[i] += debug.position; 
             vertices[i].x = -vertices[i].x;
         }
+        currentVertices = vertices;
             // Specify the file path
         // string filePath = Application.dataPath + "/UnityVertices.txt";
 
@@ -600,5 +652,10 @@ public class PoseController : MonoBehaviour
     public ComputeBuffer GetVertexBuffer()
     {
         return vertexBuffer;
+    }
+
+    public Vector3[] GetCurrentVertices()
+    {
+        return currentVertices;
     }
 }

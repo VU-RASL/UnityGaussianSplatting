@@ -13,6 +13,7 @@ public class HahaImporter : MonoBehaviour
 {
     public string objectName = "male3";
     [SerializeField, HideInInspector] string dataFolder = "Assets/HahaData";
+    [SerializeField, HideInInspector] string resourcesFolder = "HahaData";
     [SerializeField, HideInInspector] string filePrefix = "state_dict_";
     [SerializeField, HideInInspector] string fileExtension = ".json";
     [SerializeField, HideInInspector] string texSavePath = "Assets/HahaData/extracted_texture.png";
@@ -49,10 +50,12 @@ public class HahaImporter : MonoBehaviour
     public bool EnsureLoaded()
     {
         string fullPath = Path.GetFullPath(GetJsonPath());
-        if (data == null || loadedFullPath != fullPath)
+        string resourcePath = GetResourcePath();
+        string loadKey = GetDataCacheKey(fullPath, resourcePath);
+        if (data == null || loadedFullPath != loadKey)
         {
-            data = GetOrLoadData(fullPath);
-            loadedFullPath = fullPath;
+            data = GetOrLoadData(fullPath, resourcePath);
+            loadedFullPath = loadKey;
             buffersInitialized = false;
         }
 
@@ -80,16 +83,72 @@ public class HahaImporter : MonoBehaviour
         return Path.Combine(dataFolder, $"{filePrefix}{cleanObjectName}{fileExtension}");
     }
 
-    static HahaAvatarData GetOrLoadData(string fullPath)
+    public string GetResourcePath()
     {
-        if (s_DataCache.TryGetValue(fullPath, out HahaAvatarData cachedData))
+        string cleanObjectName = string.IsNullOrWhiteSpace(objectName) ? "male3" : objectName.Trim();
+        return $"{resourcesFolder}/{filePrefix}{cleanObjectName}";
+    }
+
+    static string GetDataCacheKey(string fullPath, string resourcePath)
+    {
+#if UNITY_EDITOR
+        if (File.Exists(fullPath))
+        {
+            return fullPath;
+        }
+#endif
+        return $"resources://{resourcePath}";
+    }
+
+    static HahaAvatarData GetOrLoadData(string fullPath, string resourcePath)
+    {
+        string cacheKey = GetDataCacheKey(fullPath, resourcePath);
+        if (s_DataCache.TryGetValue(cacheKey, out HahaAvatarData cachedData))
         {
             return cachedData;
         }
 
-        HahaAvatarData loadedData = new HahaAvatarData(fullPath);
-        s_DataCache[fullPath] = loadedData;
-        return loadedData;
+        try
+        {
+            string jsonContent = LoadJsonContent(fullPath, resourcePath);
+            if (string.IsNullOrEmpty(jsonContent))
+            {
+                return null;
+            }
+
+            HahaAvatarData loadedData = HahaAvatarData.FromJson(jsonContent);
+            s_DataCache[cacheKey] = loadedData;
+            return loadedData;
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Failed to load Haha avatar data '{resourcePath}': {e.Message}");
+            return null;
+        }
+    }
+
+    static string LoadJsonContent(string fullPath, string resourcePath)
+    {
+#if UNITY_EDITOR
+        if (File.Exists(fullPath))
+        {
+            return File.ReadAllText(fullPath);
+        }
+#endif
+
+        TextAsset resource = Resources.Load<TextAsset>(resourcePath);
+        if (resource != null)
+        {
+            return resource.text;
+        }
+
+        if (File.Exists(fullPath))
+        {
+            return File.ReadAllText(fullPath);
+        }
+
+        Debug.LogError($"Could not find Haha avatar data at '{fullPath}' or Resources/{resourcePath}.json.");
+        return null;
     }
 
     void ExportGaussianToFace()
@@ -266,8 +325,22 @@ public class HahaAvatarData
 
     public HahaAvatarData(string path)
     {
-        string content = File.ReadAllText(path);
+        LoadFromJson(File.ReadAllText(path));
+    }
 
+    public static HahaAvatarData FromJson(string content)
+    {
+        HahaAvatarData avatarData = new HahaAvatarData();
+        avatarData.LoadFromJson(content);
+        return avatarData;
+    }
+
+    HahaAvatarData()
+    {
+    }
+
+    void LoadFromJson(string content)
+    {
         HahaOutputData data = JsonConvert.DeserializeObject<HahaOutputData>(content);
         // data = SwitchHandedness(data);
         splatCount = data._xyz.Length;

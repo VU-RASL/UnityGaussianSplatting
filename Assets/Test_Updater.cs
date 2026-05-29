@@ -4,6 +4,7 @@ using System;
 using Unity.Mathematics;
 using System.IO;
 
+[DefaultExecutionOrder(100)]
 public class TestShaderWithBuffer : MonoBehaviour
 {
     public Transform debug;
@@ -13,6 +14,7 @@ public class TestShaderWithBuffer : MonoBehaviour
 
     public PoseController poseController;
     [SerializeField] private GaussianSplatRenderer gaussianRenderer;
+    [SerializeField] private bool forceCpuSplatUpdate;
     
     // GPU Buffers
     private ComputeBuffer gaussianToFaceBuffer;
@@ -27,6 +29,40 @@ public class TestShaderWithBuffer : MonoBehaviour
     private int calcFacesKernelHandle;
     private int mapGaussiansKernelHandle;
     private bool isInitialized = false;
+    private int[] cpuGaussianToFace;
+    private int3[] cpuFaces;
+    private float3[] cpuOffsets;
+    private float4[] cpuRotations;
+    private uint[] cpuPositionData;
+    private Vector3[] cpuSortPositions;
+    private uint[] cpuOtherData;
+    private int cpuOtherStrideWords;
+    private GraphicsBuffer questCpuPositionBuffer;
+
+    bool UseQuestCpuSplatUpdate
+    {
+        get
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            return true;
+#else
+            return forceCpuSplatUpdate;
+#endif
+        }
+    }
+
+    bool UseDirectQuestPositionBuffer
+    {
+        get
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            return true;
+#else
+            return false;
+#endif
+        }
+    }
+
     public struct GaussianData
     {
         public Vector4 rotation;  // Quaternion rotation (x, y, z, w)
@@ -83,22 +119,6 @@ public class TestShaderWithBuffer : MonoBehaviour
 
     void InitializeBuffers()
     {
-        gaussianToFaceBuffer = hahaImporter.GetGaussianToFaceBuffer();
-        haha_xyzBuffer = hahaImporter.GetHahaXyzBuffer();
-        haha_rotationBuffer = hahaImporter.GetHahaRotationBuffer();
-        // haha_scalingBuffer = hahaImporter.GetHahaScalingBuffer();
-        float3[] haha_scaling = hahaImporter.GetHAHAScaling();
-        faceBuffer = hahaImporter.GetFaceBuffer();
-        vertexBuffer = poseController.GetVertexBuffer();
-
-        if (gaussianToFaceBuffer == null || haha_xyzBuffer == null || faceBuffer == null || vertexBuffer == null)
-        {
-            Debug.LogError("One or more buffers are null! Ensure HahaImporter and PoseController are initialized.");
-            return;
-        }
-
-        int faceCount = faceBuffer.count;
-        int gaussianCount = gaussianToFaceBuffer.count;
         if (gaussianRenderer.asset == null)
         {
             Invoke(nameof(InitializeBuffers), 0.1f);
@@ -115,6 +135,32 @@ public class TestShaderWithBuffer : MonoBehaviour
             Invoke(nameof(InitializeBuffers), 0.1f);
             return;
         }
+        if (UseQuestCpuSplatUpdate)
+        {
+            int questGaussianCount = gaussianRenderer.asset.splatCount;
+            if (!InitializeQuestCpuUpdateData(questGaussianCount))
+                return;
+            isInitialized = true;
+            ExecuteQuestCpuUpdate();
+            return;
+        }
+
+        gaussianToFaceBuffer = hahaImporter.GetGaussianToFaceBuffer();
+        haha_xyzBuffer = hahaImporter.GetHahaXyzBuffer();
+        haha_rotationBuffer = hahaImporter.GetHahaRotationBuffer();
+        // haha_scalingBuffer = hahaImporter.GetHahaScalingBuffer();
+        float3[] haha_scaling = hahaImporter.GetHAHAScaling();
+        faceBuffer = hahaImporter.GetFaceBuffer();
+        vertexBuffer = poseController.GetVertexBuffer();
+
+        if (gaussianToFaceBuffer == null || haha_xyzBuffer == null || faceBuffer == null || vertexBuffer == null)
+        {
+            Debug.LogError("One or more buffers are null! Ensure HahaImporter and PoseController are initialized.");
+            return;
+        }
+
+        int faceCount = faceBuffer.count;
+        int gaussianCount = gaussianToFaceBuffer.count;
 
         haha_scalingBuffer = new ComputeBuffer(gaussianCount, sizeof(float) * 3);
         haha_scalingBuffer.SetData(haha_scaling);
@@ -236,10 +282,19 @@ void SaveHahaScalingToTxt()
     }
     void Update()
     {
+        if (UseQuestCpuSplatUpdate)
+            return;
+
         vertexBuffer = poseController.GetVertexBuffer();
         testShader.SetBuffer(calcFacesKernelHandle, "VertexBuffer", vertexBuffer);
 
         ExecuteShader();
+    }
+
+    void LateUpdate()
+    {
+        if (UseQuestCpuSplatUpdate)
+            ExecuteQuestCpuUpdate();
     }
     void ExecuteShader()
     {
@@ -407,6 +462,322 @@ void DebugFaceBuffer()
         // Updated directly on GPU by MapGaussiansToFaces.
     }
 
+    bool InitializeQuestCpuUpdateData(int gaussianCount)
+    {
+        if (!hahaImporter.EnsureLoaded() || hahaImporter.data == null)
+        {
+            Debug.LogError("Quest CPU Gaussian update could not load Haha avatar data.");
+            enabled = false;
+            return false;
+        }
+
+        cpuGaussianToFace = hahaImporter.data.gaussianToFace;
+        cpuFaces = hahaImporter.data.facesToVerts;
+        cpuOffsets = hahaImporter.data.offsets;
+        cpuRotations = hahaImporter.data.rotations;
+        cpuPositionData = new uint[gaussianCount * 3];
+        cpuSortPositions = new Vector3[gaussianCount];
+        gaussianRenderer.SetCpuSortPositions(cpuSortPositions);
+        int otherStrideBytes = GaussianSplatAsset.GetOtherSizeNoSHIndex(gaussianRenderer.asset.scaleFormat);
+        if (gaussianRenderer.asset.shFormat > GaussianSplatAsset.SHFormat.Norm6)
+        {
+            otherStrideBytes += 2;
+        }
+        if (otherStrideBytes % sizeof(uint) != 0)
+        {
+            Debug.LogError("Quest CPU Gaussian update requires word-aligned Gaussian other data.");
+            enabled = false;
+            return false;
+        }
+
+        cpuOtherStrideWords = otherStrideBytes / sizeof(uint);
+        var originalOtherData = gaussianRenderer.asset.otherData.GetData<uint>();
+        cpuOtherData = new uint[originalOtherData.Length];
+        for (int i = 0; i < originalOtherData.Length; ++i)
+        {
+            cpuOtherData[i] = originalOtherData[i];
+        }
+
+        questCpuPositionBuffer?.Dispose();
+        questCpuPositionBuffer = null;
+
+        if (UseDirectQuestPositionBuffer)
+        {
+            gaussianRenderer.SetUpdatedPositionsBuffer(null);
+        }
+        else
+        {
+            questCpuPositionBuffer = new GraphicsBuffer(
+                GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.CopySource | GraphicsBuffer.Target.CopyDestination,
+                gaussianCount * 3,
+                sizeof(uint));
+            gaussianRenderer.SetUpdatedPositionsBuffer(questCpuPositionBuffer);
+        }
+
+        if (cpuGaussianToFace == null || cpuFaces == null || cpuOffsets == null ||
+            cpuRotations == null || cpuOtherData == null ||
+            cpuGaussianToFace.Length < gaussianCount || cpuOffsets.Length < gaussianCount ||
+            cpuRotations.Length < gaussianCount || cpuOtherData.Length < gaussianCount * cpuOtherStrideWords)
+        {
+            Debug.LogError("Quest CPU Gaussian update data is missing or has an unexpected size.");
+            enabled = false;
+            return false;
+        }
+
+        return true;
+    }
+
+    void ExecuteQuestCpuUpdate()
+    {
+        GraphicsBuffer targetPositionBuffer = UseDirectQuestPositionBuffer
+            ? gaussianRenderer.m_GpuPosData
+            : questCpuPositionBuffer;
+
+        GraphicsBuffer targetOtherBuffer = gaussianRenderer.m_GpuOtherData;
+
+        if (!isInitialized || cpuPositionData == null || cpuOtherData == null ||
+            targetPositionBuffer == null || targetOtherBuffer == null)
+            return;
+
+        Vector3[] vertices = poseController.GetCurrentVertices();
+        if (vertices == null || vertices.Length == 0)
+            return;
+
+        int gaussianCount = cpuPositionData.Length / 3;
+        for (int i = 0; i < gaussianCount; ++i)
+        {
+            int faceIndex = cpuGaussianToFace[i];
+            if (faceIndex < 0 || faceIndex >= cpuFaces.Length)
+                continue;
+
+            int3 face = cpuFaces[faceIndex];
+            if (face.x < 0 || face.x >= vertices.Length ||
+                face.y < 0 || face.y >= vertices.Length ||
+                face.z < 0 || face.z >= vertices.Length)
+                continue;
+
+            float3 v0 = ToFloat3(vertices[face.x]);
+            float3 v1 = ToFloat3(vertices[face.y]);
+            float3 v2 = ToFloat3(vertices[face.z]);
+
+            float3 t = (v0 + v1 + v2) / 3.0f;
+            float3 vec1 = v2 - v1;
+            float3 vec2 = v0 - v1;
+            float3 vec3 = v0 - v2;
+            float3 faceNormal = math.cross(vec1, vec2);
+            float3 norm = NormalizeSafe(faceNormal);
+
+            vec1 = NormalizeSafe(vec1);
+            float3 prod = NormalizeSafe(math.cross(vec1, norm));
+            float3x3 rot = new float3x3(vec1, norm, prod);
+
+            float area = math.length(faceNormal);
+            float vec3Length = math.max(math.length(vec3), 1e-6f);
+            float h = area / vec3Length;
+            float k = (h + vec3Length) * 0.5f / 0.05f;
+
+            float4 faceRotation = MatrixToQuaternionWxyz(rot);
+            float4 gaussianRotation = NormalizeQuaternionWxyz(cpuRotations[i]);
+            float4 gaussianWorldRotation = MultiplyQuaternionsWxyz(faceRotation, gaussianRotation);
+            gaussianWorldRotation.x *= -1.0f;
+            gaussianWorldRotation.y *= -1.0f;
+
+            float3 pos = t + QuaternionApplyWxyz(faceRotation, cpuOffsets[i]) * k;
+            pos.x *= -1.0f;
+            cpuSortPositions[i] = new Vector3(pos.x, pos.y, pos.z);
+
+            int outIndex = i * 3;
+            cpuPositionData[outIndex] = math.asuint(pos.x);
+            cpuPositionData[outIndex + 1] = math.asuint(pos.y);
+            cpuPositionData[outIndex + 2] = math.asuint(pos.z);
+
+            float4 normalizedRotXyzw = NormalizeQuaternionXyzw(new float4(
+                gaussianWorldRotation.y,
+                gaussianWorldRotation.z,
+                gaussianWorldRotation.w,
+                gaussianWorldRotation.x));
+            cpuOtherData[i * cpuOtherStrideWords] = EncodeQuatToNorm10(PackSmallest3Rotation(normalizedRotXyzw));
+        }
+
+        targetPositionBuffer.SetData(cpuPositionData);
+        targetOtherBuffer.SetData(cpuOtherData);
+    }
+
+    static float3 ToFloat3(Vector3 v)
+    {
+        return new float3(v.x, v.y, v.z);
+    }
+
+    static float3 NormalizeSafe(float3 v)
+    {
+        float length = math.length(v);
+        return length > 1e-6f ? v / length : new float3(0, 0, 0);
+    }
+
+    static float4 NormalizeQuaternionWxyz(float4 q)
+    {
+        float length = math.sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
+        return length > 1e-6f ? q / length : new float4(1, 0, 0, 0);
+    }
+
+    static float4 NormalizeQuaternionXyzw(float4 q)
+    {
+        float length = math.sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
+        return length > 1e-6f ? q / length : new float4(0, 0, 0, 1);
+    }
+
+    static float4 StandardizeQuaternionWxyz(float4 q)
+    {
+        return q.x < 0.0f ? -q : q;
+    }
+
+    static float4 MultiplyQuaternionsWxyz(float4 a, float4 b)
+    {
+        float aw = a.x;
+        float ax = a.y;
+        float ay = a.z;
+        float az = a.w;
+        float bw = b.x;
+        float bx = b.y;
+        float by = b.z;
+        float bz = b.w;
+
+        return StandardizeQuaternionWxyz(new float4(
+            aw * bw - ax * bx - ay * by - az * bz,
+            aw * bx + ax * bw + ay * bz - az * by,
+            aw * by - ax * bz + ay * bw + az * bx,
+            aw * bz + ax * by - ay * bx + az * bw));
+    }
+
+    static float3 QuaternionApplyWxyz(float4 quaternion, float3 point)
+    {
+        float qw = quaternion.x;
+        float3 u = new float3(quaternion.y, quaternion.z, quaternion.w);
+        float dotUP = math.dot(u, point);
+        float dotUU = math.dot(u, u);
+        float3 crossUP = math.cross(u, point);
+
+        return 2.0f * dotUP * u +
+               (qw * qw - dotUU) * point +
+               2.0f * qw * crossUP;
+    }
+
+    static float4 MatrixToQuaternionWxyz(float3x3 m)
+    {
+        float qAbs0 = math.sqrt(math.max(0.0f, 1.0f + m.c0.x + m.c1.y + m.c2.z));
+        float qAbs1 = math.sqrt(math.max(0.0f, 1.0f + m.c0.x - m.c1.y - m.c2.z));
+        float qAbs2 = math.sqrt(math.max(0.0f, 1.0f - m.c0.x + m.c1.y - m.c2.z));
+        float qAbs3 = math.sqrt(math.max(0.0f, 1.0f - m.c0.x - m.c1.y + m.c2.z));
+
+        float4 candidate0 = new float4(
+            qAbs0 * 0.5f,
+            SafeDivide(m.c1.z - m.c2.y, 2.0f * qAbs0),
+            SafeDivide(m.c2.x - m.c0.z, 2.0f * qAbs0),
+            SafeDivide(m.c0.y - m.c1.x, 2.0f * qAbs0));
+
+        float4 candidate1 = new float4(
+            SafeDivide(m.c1.z - m.c2.y, 2.0f * qAbs1),
+            qAbs1 * 0.5f,
+            SafeDivide(m.c1.x + m.c0.y, 2.0f * qAbs1),
+            SafeDivide(m.c0.z + m.c2.x, 2.0f * qAbs1));
+
+        float4 candidate2 = new float4(
+            SafeDivide(m.c2.x - m.c0.z, 2.0f * qAbs2),
+            SafeDivide(m.c1.x + m.c0.y, 2.0f * qAbs2),
+            qAbs2 * 0.5f,
+            SafeDivide(m.c2.y + m.c1.z, 2.0f * qAbs2));
+
+        float4 candidate3 = new float4(
+            SafeDivide(m.c0.y - m.c1.x, 2.0f * qAbs3),
+            SafeDivide(m.c0.z + m.c2.x, 2.0f * qAbs3),
+            SafeDivide(m.c2.y + m.c1.z, 2.0f * qAbs3),
+            qAbs3 * 0.5f);
+
+        int maxIndex = 0;
+        float maxValue = qAbs0;
+        if (qAbs1 > maxValue)
+        {
+            maxIndex = 1;
+            maxValue = qAbs1;
+        }
+        if (qAbs2 > maxValue)
+        {
+            maxIndex = 2;
+            maxValue = qAbs2;
+        }
+        if (qAbs3 > maxValue)
+        {
+            maxIndex = 3;
+        }
+
+        float4 q = candidate0;
+        if (maxIndex == 1)
+        {
+            q = candidate1;
+        }
+        else if (maxIndex == 2)
+        {
+            q = candidate2;
+        }
+        else if (maxIndex == 3)
+        {
+            q = candidate3;
+        }
+
+        return NormalizeQuaternionWxyz(q);
+    }
+
+    static float SafeDivide(float numerator, float denominator)
+    {
+        return math.abs(denominator) > 1e-6f ? numerator / denominator : 0.0f;
+    }
+
+    static float4 PackSmallest3Rotation(float4 q)
+    {
+        float4 absQ = math.abs(q);
+        int index = 0;
+        float maxV = absQ.x;
+        if (absQ.y > maxV)
+        {
+            index = 1;
+            maxV = absQ.y;
+        }
+        if (absQ.z > maxV)
+        {
+            index = 2;
+            maxV = absQ.z;
+        }
+        if (absQ.w > maxV)
+        {
+            index = 3;
+        }
+
+        if (index == 0)
+        {
+            q = new float4(q.y, q.z, q.w, q.x);
+        }
+        else if (index == 1)
+        {
+            q = new float4(q.x, q.z, q.w, q.y);
+        }
+        else if (index == 2)
+        {
+            q = new float4(q.x, q.y, q.w, q.z);
+        }
+
+        float3 three = new float3(q.x, q.y, q.z) * (q.w >= 0.0f ? 1.0f : -1.0f);
+        three = three * 1.41421356237f * 0.5f + 0.5f;
+        return new float4(three.x, three.y, three.z, index / 3.0f);
+    }
+
+    static uint EncodeQuatToNorm10(float4 v)
+    {
+        return (uint)(math.saturate(v.x) * 1023.5f) |
+               ((uint)(math.saturate(v.y) * 1023.5f) << 10) |
+               ((uint)(math.saturate(v.z) * 1023.5f) << 20) |
+               ((uint)(math.saturate(v.w) * 3.5f) << 30);
+    }
+
     public ComputeBuffer GetTBuffer()
     {
         return TBuffer;
@@ -416,6 +787,12 @@ void DebugFaceBuffer()
 
     void OnDestroy()
     {
+        if (UseQuestCpuSplatUpdate && gaussianRenderer != null)
+        {
+            gaussianRenderer.SetUpdatedPositionsBuffer(null);
+            gaussianRenderer.SetCpuSortPositions(null);
+        }
+        questCpuPositionBuffer?.Dispose();
         haha_scalingBuffer?.Release();
         TBuffer?.Release();
         RBuffer?.Release();
