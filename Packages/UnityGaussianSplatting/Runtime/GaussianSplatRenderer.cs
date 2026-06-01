@@ -203,7 +203,7 @@ namespace GaussianSplatting.Runtime
             return matComposite;
         }
 
-        void RenderDepthMasks(Camera cam, CommandBuffer cmb)
+        void RenderDepthMasks(Camera cam, CommandBuffer cmb, bool useVertexViewDataFallback)
         {
             foreach (var kvp in m_ActiveSplats)
             {
@@ -218,26 +218,44 @@ namespace GaussianSplatting.Runtime
                 gs.SetAssetDataOnMaterial(mpb);
                 mpb.SetBuffer(GaussianSplatRenderer.Props.SplatViewData, gs.m_GpuView);
                 mpb.SetBuffer(GaussianSplatRenderer.Props.OrderBuffer, gs.m_GpuSortKeys);
+                mpb.SetFloat(GaussianSplatRenderer.Props.SplatScale, gs.m_SplatScale);
+                mpb.SetFloat(GaussianSplatRenderer.Props.SplatOpacityScale, gs.m_OpacityScale);
                 float alphaThreshold = gs.m_OcclusionAlphaThreshold < 0.02f ? 0.12f : gs.m_OcclusionAlphaThreshold;
                 mpb.SetFloat(GaussianSplatRenderer.Props.DepthMaskAlphaThreshold, alphaThreshold);
                 mpb.SetFloat(GaussianSplatRenderer.Props.DepthMaskLocalAlphaEpsilon, 1.0f / 255.0f);
                 mpb.SetFloat(GaussianSplatRenderer.Props.DepthMaskEdgeShrinkPixels, gs.m_OcclusionEdgeShrinkPixels);
+                mpb.SetFloat(GaussianSplatRenderer.Props.DepthMaskUseRawSplatData, useVertexViewDataFallback ? 1.0f : 0.0f);
                 mpb.SetFloat(GaussianSplatRenderer.Props.GaussianSplatClipFlipY, ShouldFlipSplatClipY(cam) ? 1.0f : 0.0f);
 
-                cmb.BeginSample(s_ProfCalcView);
-                gs.CalcViewData(cmb, cam, matrix);
-                cmb.EndSample(s_ProfCalcView);
+                if (useVertexViewDataFallback)
+                {
+                    gs.SortPointsCpu(cam, matrix);
+                }
+                else
+                {
+                    cmb.BeginSample(s_ProfCalcView);
+                    gs.CalcViewData(cmb, cam, matrix);
+                    cmb.EndSample(s_ProfCalcView);
+                }
 
                 cmb.BeginSample(s_ProfDepthMask);
-                cmb.GetTemporaryRT(GaussianSplatRenderer.Props.GaussianDepthCoverageRT, -1, -1, 0, FilterMode.Bilinear, GraphicsFormat.R16G16B16A16_SFloat);
-                cmb.SetRenderTarget(GaussianSplatRenderer.Props.GaussianDepthCoverageRT);
-                cmb.ClearRenderTarget(RTClearFlags.Color, new Color(0, 0, 0, 0), 0, 0);
-                cmb.DrawProcedural(gs.m_GpuIndexBuffer, matrix, gs.m_MatDepthMask, 0, MeshTopology.Triangles, 6, gs.splatCount, mpb);
+                if (useVertexViewDataFallback)
+                {
+                    SetCameraDepthWriteTarget(cmb);
+                    cmb.DrawProcedural(gs.m_GpuIndexBuffer, matrix, gs.m_MatDepthMask, 2, MeshTopology.Triangles, 6, gs.splatCount, mpb);
+                }
+                else
+                {
+                    cmb.GetTemporaryRT(GaussianSplatRenderer.Props.GaussianDepthCoverageRT, -1, -1, 0, FilterMode.Bilinear, GraphicsFormat.R16G16B16A16_SFloat);
+                    cmb.SetRenderTarget(GaussianSplatRenderer.Props.GaussianDepthCoverageRT);
+                    cmb.ClearRenderTarget(RTClearFlags.Color, new Color(0, 0, 0, 0), 0, 0);
+                    cmb.DrawProcedural(gs.m_GpuIndexBuffer, matrix, gs.m_MatDepthMask, 0, MeshTopology.Triangles, 6, gs.splatCount, mpb);
 
-                cmb.SetGlobalTexture(GaussianSplatRenderer.Props.GaussianDepthCoverageRT, new RenderTargetIdentifier(GaussianSplatRenderer.Props.GaussianDepthCoverageRT));
-                cmb.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
-                cmb.DrawProcedural(gs.m_GpuIndexBuffer, matrix, gs.m_MatDepthMask, 1, MeshTopology.Triangles, 6, gs.splatCount, mpb);
-                cmb.ReleaseTemporaryRT(GaussianSplatRenderer.Props.GaussianDepthCoverageRT);
+                    cmb.SetGlobalTexture(GaussianSplatRenderer.Props.GaussianDepthCoverageRT, new RenderTargetIdentifier(GaussianSplatRenderer.Props.GaussianDepthCoverageRT));
+                    SetCameraDepthWriteTarget(cmb);
+                    cmb.DrawProcedural(gs.m_GpuIndexBuffer, matrix, gs.m_MatDepthMask, 1, MeshTopology.Triangles, 6, gs.splatCount, mpb);
+                    cmb.ReleaseTemporaryRT(GaussianSplatRenderer.Props.GaussianDepthCoverageRT);
+                }
                 cmb.EndSample(s_ProfDepthMask);
             }
         }
@@ -268,8 +286,8 @@ namespace GaussianSplatting.Runtime
 
             InitialClearCmdBuffer(cam);
 
-            if (!ShouldUseVertexViewDataFallback(cam))
-                RenderDepthMasks(cam, m_DepthMaskCommandBuffer);
+            bool useVertexViewDataFallback = ShouldUseVertexViewDataFallback(cam);
+            RenderDepthMasks(cam, m_DepthMaskCommandBuffer, useVertexViewDataFallback);
 
             m_CommandBuffer.GetTemporaryRT(GaussianSplatRenderer.Props.GaussianSplatRT, -1, -1, 0, FilterMode.Point, GraphicsFormat.R16G16B16A16_SFloat);
             m_CommandBuffer.SetRenderTarget(GaussianSplatRenderer.Props.GaussianSplatRT, BuiltinRenderTextureType.CurrentActive);
@@ -281,9 +299,15 @@ namespace GaussianSplatting.Runtime
             // compose
             m_CommandBuffer.BeginSample(s_ProfCompose);
             m_CommandBuffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
-            m_CommandBuffer.DrawProcedural(Matrix4x4.identity, matComposite, 0, MeshTopology.Triangles, 3, 1);
+            int compositePass = ShouldUseQuestOpaqueComposite(cam) ? 1 : 0;
+            m_CommandBuffer.DrawProcedural(Matrix4x4.identity, matComposite, compositePass, MeshTopology.Triangles, 3, 1);
             m_CommandBuffer.EndSample(s_ProfCompose);
             m_CommandBuffer.ReleaseTemporaryRT(GaussianSplatRenderer.Props.GaussianSplatRT);
+        }
+
+        internal static bool ShouldUseQuestOpaqueComposite(Camera cam)
+        {
+            return false;
         }
 
         static bool ShouldUseVertexViewDataFallback(Camera cam)
@@ -292,6 +316,15 @@ namespace GaussianSplatting.Runtime
             return cam != null && cam.cameraType == CameraType.Game;
 #else
             return false;
+#endif
+        }
+
+        static void SetCameraDepthWriteTarget(CommandBuffer cmb)
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            cmb.SetRenderTarget(BuiltinRenderTextureType.CameraTarget, BuiltinRenderTextureType.Depth);
+#else
+            cmb.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
 #endif
         }
 
@@ -461,6 +494,7 @@ namespace GaussianSplatting.Runtime
             public static readonly int DepthMaskAlphaThreshold = Shader.PropertyToID("_DepthMaskAlphaThreshold");
             public static readonly int DepthMaskLocalAlphaEpsilon = Shader.PropertyToID("_DepthMaskLocalAlphaEpsilon");
             public static readonly int DepthMaskEdgeShrinkPixels = Shader.PropertyToID("_DepthMaskEdgeShrinkPixels");
+            public static readonly int DepthMaskUseRawSplatData = Shader.PropertyToID("_DepthMaskUseRawSplatData");
             public static readonly int GaussianSceneZTest = Shader.PropertyToID("_GaussianSceneZTest");
             public static readonly int SplatSortKeys = Shader.PropertyToID("_SplatSortKeys");
             public static readonly int SplatSortDistances = Shader.PropertyToID("_SplatSortDistances");
@@ -623,6 +657,10 @@ namespace GaussianSplatting.Runtime
             if (depthMaskShader != null)
             {
                 m_MatDepthMask = new Material(depthMaskShader) { name = "GaussianDepthMask" };
+            }
+            else if (m_OccludeSceneObjects)
+            {
+                Debug.LogError("Gaussian splat depth occlusion is enabled, but the Depth Mask shader is missing. Assign GaussianDepthMask.shader on the renderer or include it in Graphics Settings.", this);
             }
             m_MatDebugPoints = new Material(m_ShaderDebugPoints) {name = "GaussianDebugPoints"};
             m_MatDebugBoxes = new Material(m_ShaderDebugBoxes) {name = "GaussianDebugBoxes"};

@@ -24,6 +24,7 @@ CGPROGRAM
 #pragma require compute
 #pragma use_dxc
 
+#include "UnityCG.cginc"
 #include "GaussianSplatting.hlsl"
 
 StructuredBuffer<uint> _OrderBuffer;
@@ -34,6 +35,7 @@ struct v2f
     half4 col : COLOR0;
     float2 pos : TEXCOORD0;
     float4 vertex : SV_POSITION;
+    UNITY_VERTEX_OUTPUT_STEREO
 };
 
 StructuredBuffer<SplatViewData> _SplatViewData;
@@ -44,6 +46,7 @@ float _GaussianSplatClipFlipY;
 v2f vert (uint vtxID : SV_VertexID, uint instID : SV_InstanceID)
 {
     v2f o = (v2f)0;
+    UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
     instID = _OrderBuffer[instID];
 	SplatViewData view = _SplatViewData[instID];
 	float4 centerClipPos = view.pos;
@@ -109,6 +112,7 @@ v2f vert (uint vtxID : SV_VertexID, uint instID : SV_InstanceID)
 
 half4 frag (v2f i) : SV_Target
 {
+    UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
 	float power = -dot(i.pos, i.pos);
 	half alpha = exp(power);
 	if (i.col.a >= 0)
@@ -153,6 +157,7 @@ CGPROGRAM
 #pragma require compute
 #pragma use_dxc
 
+#include "UnityCG.cginc"
 #include "GaussianSplatting.hlsl"
 
 StructuredBuffer<uint> _OrderBuffer;
@@ -167,6 +172,7 @@ struct v2f
     half4 col : COLOR0;
     float2 pos : TEXCOORD0;
     float4 vertex : SV_POSITION;
+    UNITY_VERTEX_OUTPUT_STEREO
 };
 
 void DecomposeCovarianceForVertex(float3 cov2d, out float2 v1, out float2 v2)
@@ -186,6 +192,7 @@ void DecomposeCovarianceForVertex(float3 cov2d, out float2 v1, out float2 v2)
 v2f vert(uint vtxID : SV_VertexID, uint instID : SV_InstanceID)
 {
     v2f o = (v2f)0;
+    UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
     instID = _OrderBuffer[instID];
 
     SplatData splat = LoadSplatData(instID);
@@ -238,6 +245,7 @@ v2f vert(uint vtxID : SV_VertexID, uint instID : SV_InstanceID)
 
 half4 frag(v2f i) : SV_Target
 {
+    UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
     float power = -dot(i.pos, i.pos);
     half alpha = exp(power);
     if (i.col.a >= 0)
