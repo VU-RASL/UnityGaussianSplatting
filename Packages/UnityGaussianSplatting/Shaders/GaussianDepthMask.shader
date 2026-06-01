@@ -7,6 +7,7 @@ Shader "Hidden/Gaussian Splatting/Depth Mask"
         _DepthMaskLocalAlphaEpsilon ("Local Alpha Epsilon", Float) = 0.0039215686
         _DepthMaskEdgeShrinkPixels ("Edge Shrink Pixels", Float) = 1.0
         _DepthMaskUseRawSplatData ("Use Raw Splat Data", Float) = 0.0
+        _DepthMaskForceNearDepth ("Force Near Depth", Float) = 0.0
     }
 
     SubShader
@@ -33,9 +34,13 @@ float _DepthMaskAlphaThreshold;
 float _DepthMaskLocalAlphaEpsilon;
 float _DepthMaskEdgeShrinkPixels;
 float _DepthMaskUseRawSplatData;
+float _DepthMaskForceNearDepth;
 float _SplatScale;
 float _SplatOpacityScale;
 float _GaussianSplatClipFlipY;
+float4x4 _MatrixVP;
+float4x4 _MatrixMV;
+float4x4 _MatrixP;
 
 void DecomposeCovarianceForDepth(float3 cov2d, out float2 v1, out float2 v2)
 {
@@ -65,7 +70,7 @@ v2f vert(uint vtxID : SV_VertexID, uint instID : SV_InstanceID)
     {
         SplatData splat = LoadSplatData(instID);
         float3 centerWorldPos = mul(unity_ObjectToWorld, float4(splat.pos, 1)).xyz;
-        centerClipPos = mul(UNITY_MATRIX_VP, float4(centerWorldPos, 1));
+        centerClipPos = mul(_MatrixVP, float4(centerWorldPos, 1));
 
         float3x3 splatRotScaleMat = CalcMatrixFromRotationScale(splat.rot, splat.scale);
         float3 cov3d0, cov3d1;
@@ -75,7 +80,7 @@ v2f vert(uint vtxID : SV_VertexID, uint instID : SV_InstanceID)
         cov3d0 *= splatScale2;
         cov3d1 *= splatScale2;
 
-        float3 cov2d = CalcCovariance2D(splat.pos, cov3d0, cov3d1, UNITY_MATRIX_MV, UNITY_MATRIX_P, _ScreenParams);
+        float3 cov2d = CalcCovariance2D(splat.pos, cov3d0, cov3d1, _MatrixMV, _MatrixP, _ScreenParams);
         DecomposeCovarianceForDepth(cov2d, axis1, axis2);
         o.alpha = min(splat.opacity * _SplatOpacityScale, 65000);
     }
@@ -104,6 +109,14 @@ v2f vert(uint vtxID : SV_VertexID, uint instID : SV_InstanceID)
     o.vertex.xy += deltaScreenPos * centerClipPos.w;
     if (_GaussianSplatClipFlipY > 0.5)
         o.vertex.y = -o.vertex.y;
+    if (_DepthMaskForceNearDepth > 0.5)
+    {
+#if defined(UNITY_REVERSED_Z)
+        o.vertex.z = o.vertex.w;
+#else
+        o.vertex.z = UNITY_NEAR_CLIP_VALUE * o.vertex.w;
+#endif
+    }
     return o;
 }
 
@@ -158,6 +171,33 @@ half4 fragDirectDepth(v2f i) : SV_Target
     clip(localAlpha - _DepthMaskLocalAlphaEpsilon);
     return 0;
 }
+
+struct depthProxyAppData
+{
+    float4 vertex : POSITION;
+    UNITY_VERTEX_INPUT_INSTANCE_ID
+};
+
+struct depthProxyV2f
+{
+    float4 vertex : SV_POSITION;
+    UNITY_VERTEX_OUTPUT_STEREO
+};
+
+depthProxyV2f vertDepthProxy(depthProxyAppData v)
+{
+    depthProxyV2f o = (depthProxyV2f)0;
+    UNITY_SETUP_INSTANCE_ID(v);
+    UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
+    o.vertex = UnityObjectToClipPos(v.vertex);
+    return o;
+}
+
+half4 fragDepthProxy(depthProxyV2f i) : SV_Target
+{
+    UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
+    return 0;
+}
 ENDCG
 
         Pass
@@ -196,7 +236,7 @@ ENDCG
         Pass
         {
             ZWrite On
-            ZTest LEqual
+            ZTest Always
             ColorMask 0
             Blend Zero One
             Cull Off
@@ -206,6 +246,22 @@ CGPROGRAM
 #pragma fragment fragDirectDepth
 #pragma require compute
 #pragma use_dxc
+ENDCG
+        }
+
+        Pass
+        {
+            ZWrite On
+            ZTest LEqual
+            ColorMask 0
+            Blend Zero One
+            Cull Back
+
+CGPROGRAM
+#pragma vertex vertDepthProxy
+#pragma fragment fragDepthProxy
+#pragma require compute
+#pragma multi_compile_instancing
 ENDCG
         }
     }
