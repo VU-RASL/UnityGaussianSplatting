@@ -49,8 +49,7 @@ namespace GaussianSplatting.Runtime
 
                 // compose
                 m_Cmb.BeginSample(GaussianSplatRenderSystem.s_ProfCompose);
-                int compositePass = GaussianSplatRenderSystem.ShouldUseQuestOpaqueComposite(renderingData.cameraData.camera) ? 1 : 0;
-                Blitter.BlitCameraTexture(m_Cmb, m_RenderTarget, m_Renderer.cameraColorTargetHandle, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store, matComposite, compositePass);
+                Blitter.BlitCameraTexture(m_Cmb, m_RenderTarget, m_Renderer.cameraColorTargetHandle, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store, matComposite, 0);
                 m_Cmb.EndSample(GaussianSplatRenderSystem.s_ProfCompose);
                 context.ExecuteCommandBuffer(m_Cmb);
             }

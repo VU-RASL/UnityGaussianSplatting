@@ -22,6 +22,7 @@ v2f vert (uint vtxID : SV_VertexID)
 }
 
 Texture2D _GaussianSplatRT;
+float _GaussianSceneDepthAlphaThreshold;
 
 half4 frag (v2f i) : SV_Target
 {
@@ -30,6 +31,25 @@ half4 frag (v2f i) : SV_Target
     col.rgb = GammaToLinearSpace(col.rgb);
     col.a = saturate(col.a * 1.5);
     return col;
+}
+
+v2f vertNearDepth(uint vtxID : SV_VertexID)
+{
+    v2f o = vert(vtxID);
+#if defined(UNITY_REVERSED_Z)
+    o.vertex.z = o.vertex.w;
+#else
+    o.vertex.z = UNITY_NEAR_CLIP_VALUE * o.vertex.w;
+#endif
+    return o;
+}
+
+half4 fragDepthFromAlpha(v2f i) : SV_Target
+{
+    UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
+    half4 col = _GaussianSplatRT.Load(int3(i.vertex.xy, 0));
+    clip(col.a - _GaussianSceneDepthAlphaThreshold);
+    return 0;
 }
 
 ENDCG
@@ -44,6 +64,22 @@ ENDCG
 CGPROGRAM
 #pragma vertex vert
 #pragma fragment frag
+#pragma require compute
+#pragma use_dxc
+ENDCG
+        }
+
+        Pass
+        {
+            ZWrite On
+            ZTest Always
+            ColorMask 0
+            Cull Off
+            Blend Zero One
+
+CGPROGRAM
+#pragma vertex vertNearDepth
+#pragma fragment fragDepthFromAlpha
 #pragma require compute
 #pragma use_dxc
 ENDCG
