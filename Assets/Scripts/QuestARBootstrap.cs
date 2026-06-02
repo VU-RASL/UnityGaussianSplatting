@@ -99,6 +99,9 @@ public sealed class QuestARBootstrap : MonoBehaviour
         ConfigureAR();
         RestartEnabledBehaviours("UnityEngine.XR.ARFoundation.ARSession, Unity.XR.ARFoundation");
         RestartEnabledBehaviours("UnityEngine.XR.ARFoundation.ARCameraManager, Unity.XR.ARFoundation");
+        RestartEnabledBehaviours("UnityEngine.XR.ARFoundation.ARPlaneManager, Unity.XR.ARFoundation");
+        RestartEnabledBehaviours("UnityEngine.XR.ARFoundation.ARRaycastManager, Unity.XR.ARFoundation");
+        RestartEnabledBehaviours(typeof(ARGroundPlacement));
         Debug.Log("Quest AR passthrough components configured.");
     }
 
@@ -153,6 +156,11 @@ public sealed class QuestARBootstrap : MonoBehaviour
         if (type == null || !typeof(Behaviour).IsAssignableFrom(type))
             return;
 
+        RestartEnabledBehaviours(type);
+    }
+
+    static void RestartEnabledBehaviours(Type type)
+    {
         foreach (var obj in FindObjectsOfType(type, true))
         {
             var behaviour = (Behaviour)obj;

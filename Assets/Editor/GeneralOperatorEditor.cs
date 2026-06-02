@@ -79,6 +79,8 @@ public static class GeneralOperatorOpenXRUtility
     const string MetaQuestFeatureId = "com.unity.openxr.feature.metaquest";
     const string MetaArSessionFeatureId = "com.unity.openxr.feature.arfoundation-meta-session";
     const string MetaArCameraFeatureId = "com.unity.openxr.feature.arfoundation-meta-camera";
+    const string MetaArPlaneFeatureId = "com.unity.openxr.feature.arfoundation-meta-plane";
+    const string MetaArRaycastFeatureId = "com.unity.openxr.feature.arfoundation-meta-raycast";
 
     public static GeneralBuildMode FindLoadedOperatorMode()
     {
@@ -118,10 +120,16 @@ public static class GeneralOperatorOpenXRUtility
             bool shouldEnable =
                 featureId == MetaQuestFeatureId ||
                 (mode == GeneralBuildMode.AR &&
-                 (featureId == MetaArSessionFeatureId || featureId == MetaArCameraFeatureId));
+                 (featureId == MetaArSessionFeatureId ||
+                  featureId == MetaArCameraFeatureId ||
+                  featureId == MetaArPlaneFeatureId ||
+                  featureId == MetaArRaycastFeatureId));
             bool shouldDisable =
                 mode == GeneralBuildMode.VR &&
-                (featureId == MetaArSessionFeatureId || featureId == MetaArCameraFeatureId);
+                (featureId == MetaArSessionFeatureId ||
+                 featureId == MetaArCameraFeatureId ||
+                 featureId == MetaArPlaneFeatureId ||
+                 featureId == MetaArRaycastFeatureId);
 
             if (shouldEnable && !feature.enabled)
             {

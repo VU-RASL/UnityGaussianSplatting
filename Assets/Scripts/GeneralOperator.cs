@@ -60,11 +60,23 @@ public sealed class GeneralOperator : MonoBehaviour
         bool enableAR = Mode == GeneralBuildMode.AR;
         SetComponentsEnabled("UnityEngine.XR.ARFoundation.ARSession, Unity.XR.ARFoundation", enableAR);
         SetComponentsEnabled("UnityEngine.XR.ARFoundation.ARCameraManager, Unity.XR.ARFoundation", enableAR);
+        SetComponentsEnabled("UnityEngine.XR.ARFoundation.ARPlaneManager, Unity.XR.ARFoundation", enableAR);
+        SetComponentsEnabled("UnityEngine.XR.ARFoundation.ARRaycastManager, Unity.XR.ARFoundation", enableAR);
+        SetComponentsEnabled(typeof(ARGroundPlacement), enableAR);
     }
 
     static void SetComponentsEnabled(string typeName, bool enabled)
     {
         Type type = Type.GetType(typeName);
+        if (type == null || !typeof(Behaviour).IsAssignableFrom(type))
+            return;
+
+        foreach (var behaviour in FindObjectsOfType(type, true))
+            ((Behaviour)behaviour).enabled = enabled;
+    }
+
+    static void SetComponentsEnabled(Type type, bool enabled)
+    {
         if (type == null || !typeof(Behaviour).IsAssignableFrom(type))
             return;
 

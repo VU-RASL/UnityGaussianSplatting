@@ -1,0 +1,267 @@
+using System.Collections.Generic;
+using Unity.XR.CoreUtils;
+using UnityEngine;
+using UnityEngine.XR.ARFoundation;
+using UnityEngine.XR.ARSubsystems;
+
+public sealed class ARGroundPlacement : MonoBehaviour
+{
+    [SerializeField] Transform avatarRoot;
+    [SerializeField] Camera arCamera;
+    [SerializeField] Transform[] extraGroundedObjects;
+    [SerializeField] float distanceInFrontOfCamera = 2.0f;
+    [SerializeField] float floorHeightOffset;
+    [SerializeField] float estimatedHeadHeight = 1.6f;
+    [SerializeField] float retrySeconds = 8.0f;
+    [SerializeField] bool faceCamera = true;
+    [SerializeField] bool configureXROriginForAR = true;
+
+    static readonly List<ARRaycastHit> s_Hits = new();
+
+    XROrigin xrOrigin;
+    ARPlaneManager planeManager;
+    ARRaycastManager raycastManager;
+    float startTime;
+    bool configuredXROrigin;
+    bool placedOnce;
+    bool placedOnDetectedGround;
+
+    void OnEnable()
+    {
+        startTime = Time.time;
+        configuredXROrigin = false;
+        placedOnce = false;
+        placedOnDetectedGround = false;
+        EnsureReferences();
+        PlaceAvatarOnGround();
+    }
+
+    void Update()
+    {
+        if (GeneralOperator.GetSceneMode() != GeneralBuildMode.AR)
+            return;
+
+        if (placedOnDetectedGround)
+            return;
+
+        if (placedOnce && Time.time - startTime > retrySeconds)
+            return;
+
+        EnsureReferences();
+        PlaceAvatarOnGround();
+    }
+
+    void EnsureReferences()
+    {
+        if (avatarRoot == null)
+        {
+            var avatar = GameObject.Find("Avatar");
+            if (avatar != null)
+                avatarRoot = avatar.transform;
+        }
+
+        if (arCamera == null)
+            arCamera = Camera.main;
+
+        if (xrOrigin == null)
+            xrOrigin = FindObjectOfType<XROrigin>(true);
+
+        if (xrOrigin == null)
+            return;
+
+        ConfigureXROriginForAR();
+
+        if (planeManager == null)
+            planeManager = xrOrigin.GetComponent<ARPlaneManager>() ?? xrOrigin.gameObject.AddComponent<ARPlaneManager>();
+
+        if (raycastManager == null)
+            raycastManager = xrOrigin.GetComponent<ARRaycastManager>() ?? xrOrigin.gameObject.AddComponent<ARRaycastManager>();
+
+        planeManager.requestedDetectionMode = PlaneDetectionMode.Horizontal;
+        planeManager.enabled = true;
+        raycastManager.enabled = true;
+    }
+
+    void ConfigureXROriginForAR()
+    {
+        if (!configureXROriginForAR || configuredXROrigin || xrOrigin == null)
+            return;
+
+        xrOrigin.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+        xrOrigin.transform.localScale = Vector3.one;
+        xrOrigin.RequestedTrackingOriginMode = XROrigin.TrackingOriginMode.Floor;
+        xrOrigin.CameraYOffset = 0.0f;
+
+        if (xrOrigin.CameraFloorOffsetObject != null)
+        {
+            Transform offset = xrOrigin.CameraFloorOffsetObject.transform;
+            offset.localPosition = new Vector3(offset.localPosition.x, 0.0f, offset.localPosition.z);
+            offset.localRotation = Quaternion.identity;
+            offset.localScale = Vector3.one;
+        }
+
+        configuredXROrigin = true;
+    }
+
+    void PlaceAvatarOnGround()
+    {
+        if (avatarRoot == null || arCamera == null)
+            return;
+
+        Vector3 cameraForward = Vector3.ProjectOnPlane(arCamera.transform.forward, Vector3.up);
+        if (cameraForward.sqrMagnitude < 0.001f)
+            cameraForward = Vector3.ProjectOnPlane(arCamera.transform.up, Vector3.up);
+        if (cameraForward.sqrMagnitude < 0.001f)
+            cameraForward = Vector3.forward;
+        cameraForward.Normalize();
+
+        Vector3 target = arCamera.transform.position + cameraForward * distanceInFrontOfCamera;
+        bool foundGround = TryGetDetectedGround(target, out float groundY);
+        if (!foundGround)
+            groundY = EstimateFallbackGroundY();
+
+        Quaternion rotation = avatarRoot.rotation;
+        if (faceCamera)
+            rotation = Quaternion.LookRotation(-cameraForward, Vector3.up);
+
+        float placementGroundY = groundY + floorHeightOffset;
+        avatarRoot.SetPositionAndRotation(new Vector3(target.x, placementGroundY, target.z), rotation);
+        AlignRendererBoundsToGround(avatarRoot, placementGroundY);
+        AlignExtraObjectsToGround(placementGroundY);
+        placedOnce = true;
+        placedOnDetectedGround |= foundGround;
+    }
+
+    bool TryGetDetectedGround(Vector3 target, out float groundY)
+    {
+        groundY = 0.0f;
+        float rayStartY = Mathf.Max(target.y, arCamera.transform.position.y) + 0.25f;
+        Ray downRay = new(new Vector3(target.x, rayStartY, target.z), Vector3.down);
+
+        if (raycastManager != null &&
+            raycastManager.Raycast(downRay, s_Hits, TrackableType.PlaneWithinPolygon | TrackableType.PlaneWithinBounds | TrackableType.PlaneWithinInfinity))
+        {
+            foreach (ARRaycastHit hit in s_Hits)
+            {
+                var plane = hit.trackable as ARPlane;
+                if (plane == null || !IsFloorLikePlane(plane))
+                    continue;
+
+                if (!IsBelowHeadset(plane.center.y))
+                    continue;
+
+                groundY = hit.pose.position.y;
+                return true;
+            }
+        }
+
+        if (planeManager == null)
+            return false;
+
+        ARPlane bestPlane = null;
+        float bestDistance = float.MaxValue;
+        foreach (ARPlane plane in planeManager.trackables)
+        {
+            if (!IsFloorLikePlane(plane))
+                continue;
+
+            if (!IsBelowHeadset(plane.center.y))
+                continue;
+
+            float distance = Vector2.SqrMagnitude(new Vector2(plane.center.x - target.x, plane.center.z - target.z));
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                bestPlane = plane;
+            }
+        }
+
+        if (bestPlane == null)
+            return false;
+
+        groundY = bestPlane.center.y;
+        return true;
+    }
+
+    bool IsFloorLikePlane(ARPlane plane)
+    {
+        if (plane == null)
+            return false;
+
+        if (plane.classification == PlaneClassification.Ceiling ||
+            plane.classification == PlaneClassification.Table ||
+            plane.classification == PlaneClassification.Seat)
+            return false;
+
+        if (plane.classification == PlaneClassification.Floor)
+            return true;
+
+        return plane.alignment == PlaneAlignment.HorizontalUp &&
+               Vector3.Dot(plane.normal, Vector3.up) > 0.85f;
+    }
+
+    bool IsBelowHeadset(float y)
+    {
+        if (arCamera == null)
+            return true;
+
+        return y < arCamera.transform.position.y - 0.25f;
+    }
+
+    float EstimateFallbackGroundY()
+    {
+        if (arCamera == null)
+            return 0.0f;
+
+        if (xrOrigin != null && xrOrigin.CameraInOriginSpaceHeight > 0.25f)
+            return arCamera.transform.position.y - xrOrigin.CameraInOriginSpaceHeight;
+
+        return arCamera.transform.position.y - estimatedHeadHeight;
+    }
+
+    void AlignExtraObjectsToGround(float groundY)
+    {
+        if (extraGroundedObjects == null)
+            return;
+
+        foreach (Transform extraObject in extraGroundedObjects)
+        {
+            if (extraObject == null)
+                continue;
+
+            AlignRendererBoundsToGround(extraObject, groundY);
+        }
+    }
+
+    static void AlignRendererBoundsToGround(Transform target, float groundY)
+    {
+        if (target == null)
+            return;
+
+        Renderer[] renderers = target.GetComponentsInChildren<Renderer>(true);
+        bool hasBounds = false;
+        Bounds bounds = default;
+
+        foreach (Renderer renderer in renderers)
+        {
+            if (renderer == null || !renderer.enabled)
+                continue;
+
+            if (!hasBounds)
+            {
+                bounds = renderer.bounds;
+                hasBounds = true;
+            }
+            else
+            {
+                bounds.Encapsulate(renderer.bounds);
+            }
+        }
+
+        if (!hasBounds)
+            return;
+
+        float yCorrection = groundY - bounds.min.y;
+        target.position += Vector3.up * yCorrection;
+    }
+}
