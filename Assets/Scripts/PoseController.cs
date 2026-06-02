@@ -49,6 +49,7 @@ public class PoseController : MonoBehaviour
     private Vector3 initialMeshLocalPosition;
     private Quaternion initialMeshLocalRotation;
     private Vector3 initialMeshLocalScale;
+    private bool hasInitialTransforms;
     [SerializeField] public HahaImporter hahaImporter;
 
     public int3[] faces;
@@ -253,6 +254,45 @@ public class PoseController : MonoBehaviour
             }
         }
     }
+
+    bool EnsurePoseRuntimeReady()
+    {
+        AutoAssignReferences();
+        if (smplx == null)
+        {
+            Debug.LogError("SMPLX object not assigned!");
+            return false;
+        }
+
+        if (smr == null)
+        {
+            smr = smplx.GetComponentInChildren<SkinnedMeshRenderer>();
+        }
+
+        if (smr == null)
+        {
+            Debug.LogError("SkinnedMeshRenderer not found on SMPLX object!");
+            return false;
+        }
+
+        if (!hasInitialTransforms)
+        {
+            CacheInitialTransforms();
+        }
+
+        if (smplxAnimators == null)
+        {
+            CacheAnimators();
+        }
+
+        if (joints == null || joints.Length != customJointNames.Length)
+        {
+            InitializeJoints();
+        }
+
+        return joints != null;
+    }
+
     void UpdateSMPLXBetas(float[] betas)
     {
         if (betas.Length != SMPLX.NUM_BETAS)
@@ -366,6 +406,77 @@ public class PoseController : MonoBehaviour
         activeCustomPose = pose;
     }
 
+    public void ApplyCleanPose()
+    {
+        if (!EnsurePoseRuntimeReady())
+            return;
+
+        StopCustomPoseCoroutine();
+        using_custom = false;
+        previousUsingCustom = false;
+        customPose = null;
+        activeCustomPose = null;
+        isTPose = true;
+        SetAnimatorDrivenMode(false);
+        ApplyTPose();
+        smplx.ResetBodyPose();
+        smplx.UpdatePoseCorrectives();
+        smplx.UpdateJointPositions(false);
+        Debug.Log("Applied clean pose.");
+    }
+
+    public void ApplyTAPose()
+    {
+        if (!EnsurePoseRuntimeReady())
+            return;
+
+        ApplyStableCustomPose(GenerateCustomPose(false));
+        Debug.Log("Applied T-A pose.");
+    }
+
+    public void ApplyPose1()
+    {
+        if (!EnsurePoseRuntimeReady())
+            return;
+
+        ApplyStableCustomPose(GeneratePose1());
+        Debug.Log("Applied pose 1.");
+    }
+
+    void ApplyStableCustomPose(float[] pose)
+    {
+        StopCustomPoseCoroutine();
+        using_custom = true;
+        previousUsingCustom = true;
+        customPose = pose;
+        activeCustomPose = pose;
+        SetAnimatorDrivenMode(false);
+        DisableAnimatorsForCustomPose();
+        ApplyCustomPose(activeCustomPose);
+    }
+
+    float[] GeneratePose1()
+    {
+        float[] pose = new float[joints.Length * 3];
+        SetCustomJointEuler(pose, "left_collar", new Vector3(0.0f, 0.0f, -60.0f));
+        SetCustomJointEuler(pose, "left_shoulder", new Vector3(0.0f, 0.0f, 35.0f));
+        SetCustomJointEuler(pose, "right_collar", new Vector3(0.0f, 0.0f, 60.0f));
+        SetCustomJointEuler(pose, "right_shoulder", new Vector3(0.0f, 0.0f, -35.0f));
+        SetCustomJointEuler(pose, "right_hip", new Vector3(0.0f, 30.0f, 0.0f));
+        SetCustomJointEuler(pose, "left_hip", new Vector3(0.0f, -30.0f, 0.0f));
+        SetCustomJointEuler(pose, "left_knee", new Vector3(30.0f, 30.0f, 0.0f));
+        return pose;
+    }
+
+    void StopCustomPoseCoroutine()
+    {
+        if (customPoseCoroutine == null)
+            return;
+
+        StopCoroutine(customPoseCoroutine);
+        customPoseCoroutine = null;
+    }
+
     public void ApplyCustomPose(float[] customPose)
     {
         if (customPose == null || customPose.Length != joints.Length * 3)
@@ -457,6 +568,11 @@ public class PoseController : MonoBehaviour
 
     void CacheInitialTransforms()
     {
+        if (smplx == null || smr == null)
+        {
+            return;
+        }
+
         Transform smplxTransform = smplx.transform;
         initialSmplxLocalPosition = smplxTransform.localPosition;
         initialSmplxLocalRotation = smplxTransform.localRotation;
@@ -466,10 +582,16 @@ public class PoseController : MonoBehaviour
         initialMeshLocalPosition = meshTransform.localPosition;
         initialMeshLocalRotation = meshTransform.localRotation;
         initialMeshLocalScale = meshTransform.localScale;
+        hasInitialTransforms = true;
     }
 
     void RestoreInitialTransforms()
     {
+        if (!hasInitialTransforms || smplx == null || smr == null)
+        {
+            return;
+        }
+
         Transform smplxTransform = smplx.transform;
         smplxTransform.localPosition = initialSmplxLocalPosition;
         smplxTransform.localRotation = initialSmplxLocalRotation;

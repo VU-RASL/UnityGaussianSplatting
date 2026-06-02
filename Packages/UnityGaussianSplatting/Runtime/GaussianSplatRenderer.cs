@@ -25,7 +25,6 @@ namespace GaussianSplatting.Runtime
         // ReSharper restore MemberCanBePrivate.Global
 
         const int kDepthProxyPass = 3;
-        const int kCompositeDepthFromAlphaPass = 1;
 
         public static GaussianSplatRenderSystem instance => ms_Instance ??= new GaussianSplatRenderSystem();
         static GaussianSplatRenderSystem ms_Instance;
@@ -116,7 +115,7 @@ namespace GaussianSplatting.Runtime
         }
 
         // ReSharper disable once MemberCanBePrivate.Global - used by HDRP/URP features that are not always compiled
-        public Material SortAndRenderSplats(Camera cam, CommandBuffer cmb)
+        public Material SortAndRenderSplats(Camera cam, CommandBuffer cmb, CompareFunction sceneZTest = CompareFunction.LessEqual)
         {
 
             Material matComposite = null;
@@ -150,8 +149,7 @@ namespace GaussianSplatting.Runtime
                 bool useVertexViewData = useVertexViewDataFallback &&
                                          gs.m_RenderMode == GaussianSplatRenderer.RenderMode.Splats &&
                                          displayMat.passCount > 1;
-                displayMat.SetInt(GaussianSplatRenderer.Props.GaussianSceneZTest,
-                    gs.m_OccludeSceneObjects ? (int)CompareFunction.Always : (int)CompareFunction.LessEqual);
+                displayMat.SetInt(GaussianSplatRenderer.Props.GaussianSceneZTest, (int)sceneZTest);
                 // mpb.SetBuffer("_RECORD",gs.m_recordBuffer);
                 
                 // float3[] gs_xyz = new float3[13541];
@@ -349,18 +347,16 @@ namespace GaussianSplatting.Runtime
             InitialClearCmdBuffer(cam);
 
             bool useVertexViewDataFallback = ShouldUseVertexViewDataFallback(cam);
-            bool useQuestSplatAlphaDepth = ShouldUseQuestSplatAlphaDepth(cam);
-            bool useRawDepthMask = !useQuestSplatAlphaDepth && (ShouldUseRawQuestDepthMask(cam) || useVertexViewDataFallback);
+            // Quest still needs a pre-opaque mask, but it must write real splat depth so closer scene objects can win depth later.
+            bool useRawDepthMask = ShouldUseRawQuestDepthMask(cam) || useVertexViewDataFallback;
             RenderDepthMasks(cam, m_DepthMaskCommandBuffer, useRawDepthMask);
-            if (useQuestSplatAlphaDepth)
-                RenderQuestSplatAlphaDepth(cam, m_DepthMaskCommandBuffer);
 
             m_CommandBuffer.GetTemporaryRT(GaussianSplatRenderer.Props.GaussianSplatRT, -1, -1, 0, FilterMode.Point, GraphicsFormat.R16G16B16A16_SFloat);
             m_CommandBuffer.SetRenderTarget(GaussianSplatRenderer.Props.GaussianSplatRT, BuiltinRenderTextureType.CurrentActive);
             m_CommandBuffer.ClearRenderTarget(RTClearFlags.Color, new Color(0, 0, 0, 0), 0, 0);
 
             // add sorting, view calc and drawing commands for each splat object
-            Material matComposite = SortAndRenderSplats(cam, m_CommandBuffer);
+            Material matComposite = SortAndRenderSplats(cam, m_CommandBuffer, CompareFunction.Always);
 
             // compose
             m_CommandBuffer.BeginSample(s_ProfCompose);
@@ -368,35 +364,6 @@ namespace GaussianSplatting.Runtime
             m_CommandBuffer.DrawProcedural(Matrix4x4.identity, matComposite, 0, MeshTopology.Triangles, 3, 1);
             m_CommandBuffer.EndSample(s_ProfCompose);
             m_CommandBuffer.ReleaseTemporaryRT(GaussianSplatRenderer.Props.GaussianSplatRT);
-        }
-
-        void RenderQuestSplatAlphaDepth(Camera cam, CommandBuffer cmb)
-        {
-            // Quest needs scene opaques to see the splat silhouette in the depth buffer before they draw.
-            // This offscreen pass uses the same splat rasterization as the visible pass, but writes only depth.
-            cmb.GetTemporaryRT(GaussianSplatRenderer.Props.GaussianSplatRT, -1, -1, 0, FilterMode.Point, GraphicsFormat.R16G16B16A16_SFloat);
-            cmb.SetRenderTarget(GaussianSplatRenderer.Props.GaussianSplatRT);
-            cmb.ClearRenderTarget(RTClearFlags.Color, new Color(0, 0, 0, 0), 0, 0);
-
-            Material matComposite = SortAndRenderSplats(cam, cmb);
-            if (matComposite != null && matComposite.passCount > kCompositeDepthFromAlphaPass)
-            {
-                cmb.SetGlobalTexture(GaussianSplatRenderer.Props.GaussianSplatRT, new RenderTargetIdentifier(GaussianSplatRenderer.Props.GaussianSplatRT));
-                cmb.SetGlobalFloat(GaussianSplatRenderer.Props.GaussianSceneDepthAlphaThreshold, 1.0f / 255.0f);
-                SetCameraDepthWriteTarget(cmb);
-                cmb.DrawProcedural(Matrix4x4.identity, matComposite, kCompositeDepthFromAlphaPass, MeshTopology.Triangles, 3, 1);
-            }
-
-            cmb.ReleaseTemporaryRT(GaussianSplatRenderer.Props.GaussianSplatRT);
-        }
-
-        static bool ShouldUseQuestSplatAlphaDepth(Camera cam)
-        {
-#if UNITY_ANDROID && !UNITY_EDITOR
-            return cam != null && cam.cameraType == CameraType.Game;
-#else
-            return false;
-#endif
         }
 
         static bool ShouldUseVertexViewDataFallback(Camera cam)
@@ -410,7 +377,7 @@ namespace GaussianSplatting.Runtime
 
         static CameraEvent GetColorCommandBufferEvent()
         {
-            return CameraEvent.BeforeForwardAlpha;
+            return CameraEvent.BeforeForwardOpaque;
         }
 
         static bool ShouldUseRawQuestDepthMask(Camera cam)
@@ -534,8 +501,8 @@ namespace GaussianSplatting.Runtime
         public float m_OcclusionAlphaThreshold = 0.12f;
         [Range(0.0f, 2.0f)]
         public float m_OcclusionEdgeShrinkPixels = 1.0f;
-        [Tooltip("Quest fallback: write the Gaussian depth mask at foreground depth so opaque scene objects behind the avatar cannot show through when XR camera depth rejects procedural splat depth.")]
-        public bool m_QuestDepthMaskForceNearDepth = true;
+        [Tooltip("Quest fallback: write the Gaussian depth mask at foreground depth. Keep this off for correct depth ordering with objects in front of the avatar.")]
+        public bool m_QuestDepthMaskForceNearDepth = false;
         [Tooltip("Quest/Android: draw nearby SMPLX/skinned meshes as invisible depth-only proxies before scene opaques. This blocks objects behind the Gaussian avatar without changing the Gaussian color pass.")]
         public bool m_UseSkinnedMeshDepthProxyOnAndroid = true;
         [Tooltip("Quest/Android: draw the baked proxy at the Gaussian object's position instead of the source SMPLX renderer's position. Keep this on when the visible SMPLX test mesh is placed behind the ball.")]
@@ -705,7 +672,6 @@ namespace GaussianSplatting.Runtime
             public static readonly int DepthMaskEdgeShrinkPixels = Shader.PropertyToID("_DepthMaskEdgeShrinkPixels");
             public static readonly int DepthMaskUseRawSplatData = Shader.PropertyToID("_DepthMaskUseRawSplatData");
             public static readonly int DepthMaskForceNearDepth = Shader.PropertyToID("_DepthMaskForceNearDepth");
-            public static readonly int GaussianSceneDepthAlphaThreshold = Shader.PropertyToID("_GaussianSceneDepthAlphaThreshold");
             public static readonly int GaussianSceneZTest = Shader.PropertyToID("_GaussianSceneZTest");
             public static readonly int SplatSortKeys = Shader.PropertyToID("_SplatSortKeys");
             public static readonly int SplatSortDistances = Shader.PropertyToID("_SplatSortDistances");

@@ -50,6 +50,8 @@ ExportedObj/
 
 # Unity3D generated meta files
 *.meta
+!Assets/Scripts/ARPoseControlPanel.cs.meta
+!Assets/Scripts/GrabbableTestBall.cs.meta
 *.pidb.meta
 *.pdb.meta
 *.mdb.meta

@@ -63,6 +63,7 @@ public sealed class GeneralOperator : MonoBehaviour
         SetComponentsEnabled("UnityEngine.XR.ARFoundation.ARPlaneManager, Unity.XR.ARFoundation", enableAR);
         SetComponentsEnabled("UnityEngine.XR.ARFoundation.ARRaycastManager, Unity.XR.ARFoundation", enableAR);
         SetComponentsEnabled(typeof(ARGroundPlacement), enableAR);
+        SetComponentsEnabled(typeof(ARPoseControlPanel), enableAR);
     }
 
     static void SetComponentsEnabled(string typeName, bool enabled)

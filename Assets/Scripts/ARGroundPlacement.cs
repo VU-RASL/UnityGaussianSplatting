@@ -229,8 +229,20 @@ public sealed class ARGroundPlacement : MonoBehaviour
             if (extraObject == null)
                 continue;
 
+            if (HasBeenPlacedByUser(extraObject))
+                continue;
+
             AlignRendererBoundsToGround(extraObject, groundY);
         }
+    }
+
+    static bool HasBeenPlacedByUser(Transform target)
+    {
+        if (target == null)
+            return false;
+
+        GrabbableTestBall grabbable = target.GetComponent<GrabbableTestBall>();
+        return grabbable != null && grabbable.HasUserPlaced;
     }
 
     static void AlignRendererBoundsToGround(Transform target, float groundY)
