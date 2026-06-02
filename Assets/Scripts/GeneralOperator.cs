@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 public enum GeneralBuildMode
@@ -20,6 +21,7 @@ public sealed class GeneralOperator : MonoBehaviour
     {
         buildVR = mode == GeneralBuildMode.VR;
         buildAR = mode == GeneralBuildMode.AR;
+        ApplySceneModeComponents();
     }
 
     public static GeneralBuildMode GetSceneMode()
@@ -33,11 +35,40 @@ public sealed class GeneralOperator : MonoBehaviour
         SetMode(GeneralBuildMode.VR);
     }
 
+    void Awake()
+    {
+        ApplySceneModeComponents();
+    }
+
+    void OnEnable()
+    {
+        ApplySceneModeComponents();
+    }
+
     void OnValidate()
     {
         if (!buildVR && !buildAR)
             SetMode(GeneralBuildMode.VR);
         else if (buildVR && buildAR)
             SetMode(GeneralBuildMode.AR);
+        else
+            ApplySceneModeComponents();
+    }
+
+    public void ApplySceneModeComponents()
+    {
+        bool enableAR = Mode == GeneralBuildMode.AR;
+        SetComponentsEnabled("UnityEngine.XR.ARFoundation.ARSession, Unity.XR.ARFoundation", enableAR);
+        SetComponentsEnabled("UnityEngine.XR.ARFoundation.ARCameraManager, Unity.XR.ARFoundation", enableAR);
+    }
+
+    static void SetComponentsEnabled(string typeName, bool enabled)
+    {
+        Type type = Type.GetType(typeName);
+        if (type == null || !typeof(Behaviour).IsAssignableFrom(type))
+            return;
+
+        foreach (var behaviour in FindObjectsOfType(type, true))
+            ((Behaviour)behaviour).enabled = enabled;
     }
 }

@@ -3,6 +3,7 @@ using System.Reflection;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.XR.OpenXR;
 using UnityEngine.XR.OpenXR.Features;
@@ -49,7 +50,9 @@ public sealed class GeneralOperatorEditor : Editor
             foreach (Object selectedTarget in targets)
             {
                 var generalOperator = (GeneralOperator)selectedTarget;
+                generalOperator.ApplySceneModeComponents();
                 EditorUtility.SetDirty(generalOperator);
+                EditorSceneManager.MarkSceneDirty(generalOperator.gameObject.scene);
                 GeneralOperatorOpenXRUtility.ApplyMode(generalOperator.Mode);
             }
         }

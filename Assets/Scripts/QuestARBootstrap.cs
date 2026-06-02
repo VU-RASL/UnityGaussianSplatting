@@ -1,14 +1,15 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.XR.Management;
 
 public sealed class QuestARBootstrap : MonoBehaviour
 {
     static readonly string[] s_DefaultObjectsToHide =
     {
         "Sphere",
-        "Sphere (1)",
         "Plane",
         "Plane (1)",
         "Cube",
@@ -41,6 +42,7 @@ public sealed class QuestARBootstrap : MonoBehaviour
         }
 
         ConfigureAR();
+        StartCoroutine(RestartARManagersWhenXRLoaderIsReady());
 #endif
     }
 
@@ -62,7 +64,10 @@ public sealed class QuestARBootstrap : MonoBehaviour
     {
 #if UNITY_ANDROID && !UNITY_EDITOR
         if (GeneralOperator.GetSceneMode() == GeneralBuildMode.AR)
+        {
             ConfigureAR();
+            StartCoroutine(RestartARManagersWhenXRLoaderIsReady());
+        }
 #endif
     }
 
@@ -79,6 +84,22 @@ public sealed class QuestARBootstrap : MonoBehaviour
         EnsureComponent("UnityEngine.XR.ARFoundation.ARSession, Unity.XR.ARFoundation", null);
         ConfigureCameras();
         HideTestEnvironment();
+    }
+
+    IEnumerator RestartARManagersWhenXRLoaderIsReady()
+    {
+        for (int frame = 0; frame < 120; ++frame)
+        {
+            if (XRGeneralSettings.Instance?.Manager?.activeLoader != null)
+                break;
+
+            yield return null;
+        }
+
+        ConfigureAR();
+        RestartEnabledBehaviours("UnityEngine.XR.ARFoundation.ARSession, Unity.XR.ARFoundation");
+        RestartEnabledBehaviours("UnityEngine.XR.ARFoundation.ARCameraManager, Unity.XR.ARFoundation");
+        Debug.Log("Quest AR passthrough components configured.");
     }
 
     void ConfigureCameras()
@@ -124,5 +145,25 @@ public sealed class QuestARBootstrap : MonoBehaviour
         }
 
         return target.GetComponent(type) ?? target.AddComponent(type);
+    }
+
+    static void RestartEnabledBehaviours(string typeName)
+    {
+        Type type = Type.GetType(typeName);
+        if (type == null || !typeof(Behaviour).IsAssignableFrom(type))
+            return;
+
+        foreach (var obj in FindObjectsOfType(type, true))
+        {
+            var behaviour = (Behaviour)obj;
+            if (!behaviour.enabled)
+            {
+                behaviour.enabled = true;
+                continue;
+            }
+
+            behaviour.enabled = false;
+            behaviour.enabled = true;
+        }
     }
 }
