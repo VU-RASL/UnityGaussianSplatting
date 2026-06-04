@@ -15,6 +15,7 @@ public sealed class QuestARBootstrap : MonoBehaviour
         "Cube",
     };
     static readonly HashSet<string> s_WarnedMissingTypes = new();
+    static bool s_XRSubsystemsStarted;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
@@ -42,7 +43,7 @@ public sealed class QuestARBootstrap : MonoBehaviour
         }
 
         ConfigureAR();
-        StartCoroutine(RestartARManagersWhenXRLoaderIsReady());
+        StartCoroutine(StartXRThenRestartARManagers());
 #endif
     }
 
@@ -66,7 +67,7 @@ public sealed class QuestARBootstrap : MonoBehaviour
         if (GeneralOperator.GetSceneMode() == GeneralBuildMode.AR)
         {
             ConfigureAR();
-            StartCoroutine(RestartARManagersWhenXRLoaderIsReady());
+            StartCoroutine(StartXRThenRestartARManagers());
         }
 #endif
     }
@@ -84,6 +85,38 @@ public sealed class QuestARBootstrap : MonoBehaviour
         EnsureComponent("UnityEngine.XR.ARFoundation.ARSession, Unity.XR.ARFoundation", null);
         ConfigureCameras();
         HideTestEnvironment();
+    }
+
+    IEnumerator StartXRThenRestartARManagers()
+    {
+        yield return null;
+        yield return EnsureXRLoaderStarted();
+        yield return RestartARManagersWhenXRLoaderIsReady();
+    }
+
+    IEnumerator EnsureXRLoaderStarted()
+    {
+        XRManagerSettings manager = XRGeneralSettings.Instance?.Manager;
+        if (manager == null)
+        {
+            Debug.LogError("Quest AR could not find XR Manager Settings.");
+            yield break;
+        }
+
+        if (manager.activeLoader == null)
+            yield return manager.InitializeLoader();
+
+        if (manager.activeLoader == null)
+        {
+            Debug.LogError("Quest AR could not initialize an XR loader. Check XR Plug-in Management > Android > OpenXR.");
+            yield break;
+        }
+
+        if (!s_XRSubsystemsStarted)
+        {
+            manager.StartSubsystems();
+            s_XRSubsystemsStarted = true;
+        }
     }
 
     IEnumerator RestartARManagersWhenXRLoaderIsReady()
