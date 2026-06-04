@@ -29,7 +29,7 @@ struct v2f
 };
 
 StructuredBuffer<SplatViewData> _SplatViewData;
-sampler2D _GaussianDepthCoverageRT;
+Texture2D _GaussianDepthCoverageRT;
 float _DepthMaskAlphaThreshold;
 float _DepthMaskLocalAlphaEpsilon;
 float _DepthMaskEdgeShrinkPixels;
@@ -41,6 +41,13 @@ float _GaussianSplatClipFlipY;
 float4x4 _MatrixVP;
 float4x4 _MatrixMV;
 float4x4 _MatrixP;
+
+half LoadCoverageAlpha(float2 pixel)
+{
+    int2 size = int2(_ScreenParams.xy);
+    int2 p = clamp(int2(pixel), int2(0, 0), size - 1);
+    return _GaussianDepthCoverageRT.Load(int3(p, 0)).a;
+}
 
 void DecomposeCovarianceForDepth(float3 cov2d, out float2 v1, out float2 v2)
 {
@@ -135,29 +142,26 @@ half4 fragDepth(v2f i) : SV_Target
     half localAlpha = exp(-dot(i.pos, i.pos)) * i.alpha;
     clip(localAlpha - _DepthMaskLocalAlphaEpsilon);
 
-    if (_DepthMaskUseRawSplatData > 0.5)
-        return 0;
-
-    float2 uv = i.vertex.xy / _ScreenParams.xy;
-    half accumulatedAlpha = tex2D(_GaussianDepthCoverageRT, uv).a;
-    float2 texel = abs(_DepthMaskEdgeShrinkPixels) / _ScreenParams.xy;
+    float2 pixel = i.vertex.xy;
+    half accumulatedAlpha = LoadCoverageAlpha(pixel);
+    float texel = abs(_DepthMaskEdgeShrinkPixels);
     if (_DepthMaskEdgeShrinkPixels > 0.0)
     {
-        accumulatedAlpha = min(accumulatedAlpha, tex2D(_GaussianDepthCoverageRT, uv + float2(texel.x, 0)).a);
-        accumulatedAlpha = min(accumulatedAlpha, tex2D(_GaussianDepthCoverageRT, uv - float2(texel.x, 0)).a);
-        accumulatedAlpha = min(accumulatedAlpha, tex2D(_GaussianDepthCoverageRT, uv + float2(0, texel.y)).a);
-        accumulatedAlpha = min(accumulatedAlpha, tex2D(_GaussianDepthCoverageRT, uv - float2(0, texel.y)).a);
+        accumulatedAlpha = min(accumulatedAlpha, LoadCoverageAlpha(pixel + float2(texel, 0)));
+        accumulatedAlpha = min(accumulatedAlpha, LoadCoverageAlpha(pixel - float2(texel, 0)));
+        accumulatedAlpha = min(accumulatedAlpha, LoadCoverageAlpha(pixel + float2(0, texel)));
+        accumulatedAlpha = min(accumulatedAlpha, LoadCoverageAlpha(pixel - float2(0, texel)));
     }
     else if (_DepthMaskEdgeShrinkPixels < 0.0)
     {
-        accumulatedAlpha = max(accumulatedAlpha, tex2D(_GaussianDepthCoverageRT, uv + float2(texel.x, 0)).a);
-        accumulatedAlpha = max(accumulatedAlpha, tex2D(_GaussianDepthCoverageRT, uv - float2(texel.x, 0)).a);
-        accumulatedAlpha = max(accumulatedAlpha, tex2D(_GaussianDepthCoverageRT, uv + float2(0, texel.y)).a);
-        accumulatedAlpha = max(accumulatedAlpha, tex2D(_GaussianDepthCoverageRT, uv - float2(0, texel.y)).a);
-        accumulatedAlpha = max(accumulatedAlpha, tex2D(_GaussianDepthCoverageRT, uv + texel).a);
-        accumulatedAlpha = max(accumulatedAlpha, tex2D(_GaussianDepthCoverageRT, uv - texel).a);
-        accumulatedAlpha = max(accumulatedAlpha, tex2D(_GaussianDepthCoverageRT, uv + float2(texel.x, -texel.y)).a);
-        accumulatedAlpha = max(accumulatedAlpha, tex2D(_GaussianDepthCoverageRT, uv + float2(-texel.x, texel.y)).a);
+        accumulatedAlpha = max(accumulatedAlpha, LoadCoverageAlpha(pixel + float2(texel, 0)));
+        accumulatedAlpha = max(accumulatedAlpha, LoadCoverageAlpha(pixel - float2(texel, 0)));
+        accumulatedAlpha = max(accumulatedAlpha, LoadCoverageAlpha(pixel + float2(0, texel)));
+        accumulatedAlpha = max(accumulatedAlpha, LoadCoverageAlpha(pixel - float2(0, texel)));
+        accumulatedAlpha = max(accumulatedAlpha, LoadCoverageAlpha(pixel + float2(texel, texel)));
+        accumulatedAlpha = max(accumulatedAlpha, LoadCoverageAlpha(pixel - float2(texel, texel)));
+        accumulatedAlpha = max(accumulatedAlpha, LoadCoverageAlpha(pixel + float2(texel, -texel)));
+        accumulatedAlpha = max(accumulatedAlpha, LoadCoverageAlpha(pixel + float2(-texel, texel)));
     }
 
     clip(accumulatedAlpha - _DepthMaskAlphaThreshold);
@@ -236,7 +240,7 @@ ENDCG
         Pass
         {
             ZWrite On
-            ZTest Always
+            ZTest LEqual
             ColorMask 0
             Blend Zero One
             Cull Off

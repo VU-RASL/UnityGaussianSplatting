@@ -25,6 +25,11 @@ namespace GaussianSplatting.Runtime
         // ReSharper restore MemberCanBePrivate.Global
 
         const int kDepthProxyPass = 3;
+        // Used by the raw splat depth path on non-post-opaque cameras. Quest AR uses
+        // post-opaque splat compositing instead so Gaussian edges blend over virtual objects.
+        const float kDepthMaskVisibilityEpsilon = 1.0f / 255.0f;
+        const float kRawDepthMaskLocalAlphaEpsilon = 0.00001f;
+        const float kRawDepthMaskCoverageThreshold = kDepthMaskVisibilityEpsilon;
 
         public static GaussianSplatRenderSystem instance => ms_Instance ??= new GaussianSplatRenderSystem();
         static GaussianSplatRenderSystem ms_Instance;
@@ -66,7 +71,8 @@ namespace GaussianSplatting.Runtime
                                 {
                                     cam.RemoveCommandBuffer(CameraEvent.BeforeForwardOpaque, m_DepthMaskCommandBuffer);
                                 }
-                                cam.RemoveCommandBuffer(GetColorCommandBufferEvent(), m_CommandBuffer);
+                                cam.RemoveCommandBuffer(CameraEvent.BeforeForwardOpaque, m_CommandBuffer);
+                                cam.RemoveCommandBuffer(CameraEvent.AfterForwardOpaque, m_CommandBuffer);
                             }
                         }
                     }
@@ -215,7 +221,7 @@ namespace GaussianSplatting.Runtime
                 if (!gs.m_OccludeSceneObjects || gs.m_MatDepthMask == null)
                     continue;
 
-                bool drewDepthProxy = RenderSkinnedMeshDepthProxy(cam, cmb, gs);
+                bool drewDepthProxy = !useRawSplatData && RenderSkinnedMeshDepthProxy(cam, cmb, gs);
                 if (drewDepthProxy && !useRawSplatData)
                     continue;
 
@@ -233,10 +239,12 @@ namespace GaussianSplatting.Runtime
                 mpb.SetMatrix(GaussianSplatRenderer.Props.MatrixVP, matProj * matView);
                 mpb.SetMatrix(GaussianSplatRenderer.Props.MatrixMV, matView * matrix);
                 mpb.SetMatrix(GaussianSplatRenderer.Props.MatrixP, matProj);
-                float alphaThreshold = gs.m_OcclusionAlphaThreshold < 0.02f ? 0.12f : gs.m_OcclusionAlphaThreshold;
+                float alphaThreshold = useRawSplatData ? kRawDepthMaskCoverageThreshold : gs.m_OcclusionAlphaThreshold < 0.02f ? 0.12f : gs.m_OcclusionAlphaThreshold;
+                float localAlphaEpsilon = useRawSplatData ? kRawDepthMaskLocalAlphaEpsilon : kDepthMaskVisibilityEpsilon;
+                float edgeShrinkPixels = useRawSplatData ? 0.0f : gs.m_OcclusionEdgeShrinkPixels;
                 mpb.SetFloat(GaussianSplatRenderer.Props.DepthMaskAlphaThreshold, alphaThreshold);
-                mpb.SetFloat(GaussianSplatRenderer.Props.DepthMaskLocalAlphaEpsilon, 1.0f / 255.0f);
-                mpb.SetFloat(GaussianSplatRenderer.Props.DepthMaskEdgeShrinkPixels, gs.m_OcclusionEdgeShrinkPixels);
+                mpb.SetFloat(GaussianSplatRenderer.Props.DepthMaskLocalAlphaEpsilon, localAlphaEpsilon);
+                mpb.SetFloat(GaussianSplatRenderer.Props.DepthMaskEdgeShrinkPixels, edgeShrinkPixels);
                 mpb.SetFloat(GaussianSplatRenderer.Props.DepthMaskUseRawSplatData, useRawSplatData ? 1.0f : 0.0f);
                 mpb.SetFloat(GaussianSplatRenderer.Props.DepthMaskForceNearDepth, useRawSplatData && ShouldForceNearQuestDepthMask(cam) && gs.m_QuestDepthMaskForceNearDepth ? 1.0f : 0.0f);
                 mpb.SetFloat(GaussianSplatRenderer.Props.GaussianSplatClipFlipY, ShouldFlipDepthMaskClipY(cam) ? 1.0f : 0.0f);
@@ -253,23 +261,15 @@ namespace GaussianSplatting.Runtime
                 }
 
                 cmb.BeginSample(s_ProfDepthMask);
-                if (useRawSplatData)
-                {
-                    SetCameraDepthWriteTarget(cmb);
-                    cmb.DrawProcedural(gs.m_GpuIndexBuffer, matrix, gs.m_MatDepthMask, 2, MeshTopology.Triangles, 6, gs.splatCount, mpb);
-                }
-                else
-                {
-                    cmb.GetTemporaryRT(GaussianSplatRenderer.Props.GaussianDepthCoverageRT, -1, -1, 0, FilterMode.Bilinear, GraphicsFormat.R16G16B16A16_SFloat);
-                    cmb.SetRenderTarget(GaussianSplatRenderer.Props.GaussianDepthCoverageRT);
-                    cmb.ClearRenderTarget(RTClearFlags.Color, new Color(0, 0, 0, 0), 0, 0);
-                    cmb.DrawProcedural(gs.m_GpuIndexBuffer, matrix, gs.m_MatDepthMask, 0, MeshTopology.Triangles, 6, gs.splatCount, mpb);
+                cmb.GetTemporaryRT(GaussianSplatRenderer.Props.GaussianDepthCoverageRT, -1, -1, 0, FilterMode.Bilinear, GraphicsFormat.R16G16B16A16_SFloat);
+                cmb.SetRenderTarget(GaussianSplatRenderer.Props.GaussianDepthCoverageRT);
+                cmb.ClearRenderTarget(RTClearFlags.Color, new Color(0, 0, 0, 0), 0, 0);
+                cmb.DrawProcedural(gs.m_GpuIndexBuffer, matrix, gs.m_MatDepthMask, 0, MeshTopology.Triangles, 6, gs.splatCount, mpb);
 
-                    cmb.SetGlobalTexture(GaussianSplatRenderer.Props.GaussianDepthCoverageRT, new RenderTargetIdentifier(GaussianSplatRenderer.Props.GaussianDepthCoverageRT));
-                    SetCameraDepthWriteTarget(cmb);
-                    cmb.DrawProcedural(gs.m_GpuIndexBuffer, matrix, gs.m_MatDepthMask, 1, MeshTopology.Triangles, 6, gs.splatCount, mpb);
-                    cmb.ReleaseTemporaryRT(GaussianSplatRenderer.Props.GaussianDepthCoverageRT);
-                }
+                cmb.SetGlobalTexture(GaussianSplatRenderer.Props.GaussianDepthCoverageRT, new RenderTargetIdentifier(GaussianSplatRenderer.Props.GaussianDepthCoverageRT));
+                SetCameraDepthWriteTarget(cmb);
+                cmb.DrawProcedural(gs.m_GpuIndexBuffer, matrix, gs.m_MatDepthMask, 1, MeshTopology.Triangles, 6, gs.splatCount, mpb);
+                cmb.ReleaseTemporaryRT(GaussianSplatRenderer.Props.GaussianDepthCoverageRT);
                 cmb.EndSample(s_ProfDepthMask);
             }
         }
@@ -329,7 +329,7 @@ namespace GaussianSplatting.Runtime
             if (GraphicsSettings.currentRenderPipeline == null && cam != null && !m_CameraCommandBuffersDone.Contains(cam))
             {
                 cam.AddCommandBuffer(CameraEvent.BeforeForwardOpaque, m_DepthMaskCommandBuffer);
-                cam.AddCommandBuffer(GetColorCommandBufferEvent(), m_CommandBuffer);
+                cam.AddCommandBuffer(GetColorCommandBufferEvent(cam), m_CommandBuffer);
                 m_CameraCommandBuffersDone.Add(cam);
             }
 
@@ -341,27 +341,30 @@ namespace GaussianSplatting.Runtime
 
         void OnPreCullCamera(Camera cam)
         {
+            InitialClearCmdBuffer(cam);
             if (!GatherSplatsForCamera(cam))
                 return;
 
-            InitialClearCmdBuffer(cam);
-
             bool useVertexViewDataFallback = ShouldUseVertexViewDataFallback(cam);
-            // Quest still needs a pre-opaque mask, but it must write real splat depth so closer scene objects can win depth later.
+            bool renderSplatsAfterOpaque = ShouldRenderSplatsAfterOpaque(cam);
             bool useRawDepthMask = ShouldUseRawQuestDepthMask(cam) || useVertexViewDataFallback;
-            RenderDepthMasks(cam, m_DepthMaskCommandBuffer, useRawDepthMask);
+            if (!renderSplatsAfterOpaque)
+                RenderDepthMasks(cam, m_DepthMaskCommandBuffer, useRawDepthMask);
 
             m_CommandBuffer.GetTemporaryRT(GaussianSplatRenderer.Props.GaussianSplatRT, -1, -1, 0, FilterMode.Point, GraphicsFormat.R16G16B16A16_SFloat);
             m_CommandBuffer.SetRenderTarget(GaussianSplatRenderer.Props.GaussianSplatRT, BuiltinRenderTextureType.CurrentActive);
             m_CommandBuffer.ClearRenderTarget(RTClearFlags.Color, new Color(0, 0, 0, 0), 0, 0);
 
             // add sorting, view calc and drawing commands for each splat object
-            Material matComposite = SortAndRenderSplats(cam, m_CommandBuffer, CompareFunction.Always);
+            Material matComposite = SortAndRenderSplats(cam, m_CommandBuffer, renderSplatsAfterOpaque ? CompareFunction.LessEqual : CompareFunction.Always);
 
             // compose
             m_CommandBuffer.BeginSample(s_ProfCompose);
             m_CommandBuffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
-            m_CommandBuffer.DrawProcedural(Matrix4x4.identity, matComposite, 0, MeshTopology.Triangles, 3, 1);
+            if (matComposite != null)
+            {
+                m_CommandBuffer.DrawProcedural(Matrix4x4.identity, matComposite, 0, MeshTopology.Triangles, 3, 1);
+            }
             m_CommandBuffer.EndSample(s_ProfCompose);
             m_CommandBuffer.ReleaseTemporaryRT(GaussianSplatRenderer.Props.GaussianSplatRT);
         }
@@ -375,9 +378,9 @@ namespace GaussianSplatting.Runtime
 #endif
         }
 
-        static CameraEvent GetColorCommandBufferEvent()
+        static CameraEvent GetColorCommandBufferEvent(Camera cam)
         {
-            return CameraEvent.BeforeForwardOpaque;
+            return ShouldRenderSplatsAfterOpaque(cam) ? CameraEvent.AfterForwardOpaque : CameraEvent.BeforeForwardOpaque;
         }
 
         static bool ShouldUseRawQuestDepthMask(Camera cam)
@@ -387,6 +390,47 @@ namespace GaussianSplatting.Runtime
 #else
             return false;
 #endif
+        }
+
+        static bool ShouldRenderSplatsAfterOpaque(Camera cam)
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            return cam != null && cam.cameraType == CameraType.Game && IsSceneARMode(cam);
+#else
+            return false;
+#endif
+        }
+
+        static bool IsSceneARMode(Camera cam)
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            Type generalOperatorType = Type.GetType("GeneralOperator, Assembly-CSharp") ?? Type.GetType("GeneralOperator");
+            if (generalOperatorType != null)
+            {
+                UnityEngine.Object[] operators = UnityEngine.Object.FindObjectsOfType(generalOperatorType, true);
+                foreach (UnityEngine.Object op in operators)
+                {
+                    var buildARProperty = generalOperatorType.GetProperty("BuildAR");
+                    if (buildARProperty != null && buildARProperty.PropertyType == typeof(bool))
+                        return (bool)buildARProperty.GetValue(op);
+
+                    var modeProperty = generalOperatorType.GetProperty("Mode");
+                    if (modeProperty != null)
+                        return string.Equals(modeProperty.GetValue(op)?.ToString(), "AR", StringComparison.Ordinal);
+                }
+            }
+
+            if (cam != null)
+            {
+                foreach (Behaviour behaviour in cam.GetComponents<Behaviour>())
+                {
+                    Type type = behaviour != null ? behaviour.GetType() : null;
+                    if (type != null && type.FullName == "UnityEngine.XR.ARFoundation.ARCameraManager" && behaviour.enabled)
+                        return true;
+                }
+            }
+#endif
+            return false;
         }
 
         static bool ShouldForceNearQuestDepthMask(Camera cam)
@@ -881,6 +925,7 @@ namespace GaussianSplatting.Runtime
         internal void SetAssetDataOnMaterial(MaterialPropertyBlock mat)
         {
             mat.SetBuffer(Props.SplatPos, updatedPositionsBuffer ?? m_GpuPosData);
+            mat.SetBuffer(Props.SplatChunks, m_GpuChunks);
             mat.SetBuffer(Props.SplatOther, m_GpuOtherData);
             mat.SetBuffer(Props.SplatSH, m_GpuSHData);
             mat.SetTexture(Props.SplatColor, m_GpuColorData);
