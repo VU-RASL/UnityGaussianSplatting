@@ -15,6 +15,7 @@ public sealed class ARGroundPlacement : MonoBehaviour
     [SerializeField] float retrySeconds = 8.0f;
     [SerializeField] bool faceCamera = true;
     [SerializeField] bool configureXROriginForAR = true;
+    [SerializeField] bool keepGroundDetectionRunning;
 
     static readonly List<ARRaycastHit> s_Hits = new();
 
@@ -130,6 +131,16 @@ public sealed class ARGroundPlacement : MonoBehaviour
         AlignExtraObjectsToGround(placementGroundY);
         placedOnce = true;
         placedOnDetectedGround |= foundGround;
+        if (placedOnDetectedGround && !keepGroundDetectionRunning)
+            StopGroundDetection();
+    }
+
+    void StopGroundDetection()
+    {
+        if (planeManager != null)
+            planeManager.enabled = false;
+        if (raycastManager != null)
+            raycastManager.enabled = false;
     }
 
     bool TryGetDetectedGround(Vector3 target, out float groundY)

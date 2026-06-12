@@ -202,7 +202,9 @@ public sealed class GrabbableTestBall : MonoBehaviour
                 return true;
             }
 
-            return false;
+            // Avatar/proxy/world colliders should not make the test ball ungrabbable.
+            // Keep searching the ray hits until the ball itself is found.
+            continue;
         }
 
         return false;

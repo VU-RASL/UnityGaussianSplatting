@@ -11,9 +11,11 @@ public class PoseController : MonoBehaviour
 
 
     [SerializeField] public SMPLX smplx; // Reference to the SMPL-X model
+    public bool no_pose = false;
     public bool using_custom = false;
     public bool visualable_mesh = true;
     public float poseSwitchTime = 3f;   // Time in seconds to switch poses
+    [SerializeField, Range(1, 4)] int questVertexBakeInterval = 2;
     public float[] customPose;
     // public Material smplxMaterial;     // Assign the material with your custom shader
 
@@ -40,6 +42,7 @@ public class PoseController : MonoBehaviour
     private float[] activeCustomPose;
     private float initialAnimatorSpeed = 1.0f;
     private bool previousUsingCustom;
+    private bool previousNoPose;
     private bool previousVisualableMesh;
     private Mesh bakedMesh;
     private Vector3[] currentVertices;
@@ -50,6 +53,8 @@ public class PoseController : MonoBehaviour
     private Quaternion initialMeshLocalRotation;
     private Vector3 initialMeshLocalScale;
     private bool hasInitialTransforms;
+    private int lastVertexBakeFrame = -1;
+    private readonly List<Vector3> bakedVertexList = new List<Vector3>();
     [SerializeField] public HahaImporter hahaImporter;
 
     public int3[] faces;
@@ -63,6 +68,8 @@ public class PoseController : MonoBehaviour
     ComputeBuffer haha_xyzBuffer;
     ComputeBuffer haha_scalingBuffer;
     ComputeBuffer haha_rotationBuffer;
+
+    public bool NoPose => no_pose;
 
     void Reset()
     {
@@ -155,15 +162,20 @@ public class PoseController : MonoBehaviour
         // Initialize the GPU vertex buffer
         InitializeVertexBuffer();
 
+        previousNoPose = no_pose;
         previousUsingCustom = using_custom;
         previousVisualableMesh = visualable_mesh;
         ApplyMeshVisibility();
-        SetAnimatorDrivenMode(!using_custom);
-        if (using_custom)
+
+        if (no_pose)
         {
-            activeCustomPose = GetCustomPose();
-            ApplyCustomPose(activeCustomPose);
-            customPoseCoroutine = StartCoroutine(AnimatePose());
+            using_custom = false;
+            previousUsingCustom = false;
+            ApplyNoPoseRuntime();
+        }
+        else
+        {
+            ApplyPoseDriverFromInspector();
         }
 
         // smplx.SetBodyPose(SMPLX.BodyPose.T);
@@ -200,29 +212,38 @@ public class PoseController : MonoBehaviour
             ApplyMeshVisibility();
         }
 
+        if (no_pose != previousNoPose)
+        {
+            previousNoPose = no_pose;
+            if (no_pose)
+            {
+                using_custom = false;
+                previousUsingCustom = false;
+                ApplyNoPoseRuntime();
+            }
+            else
+            {
+                ApplyPoseDriverFromInspector();
+            }
+            return;
+        }
+
+        if (no_pose)
+        {
+            return;
+        }
+
         if (using_custom == previousUsingCustom)
         {
             return;
         }
 
-        previousUsingCustom = using_custom;
-        SetAnimatorDrivenMode(!using_custom);
-
-        if (customPoseCoroutine != null)
-        {
-            StopCoroutine(customPoseCoroutine);
-            customPoseCoroutine = null;
-        }
-
-        if (using_custom)
-        {
-            customPoseCoroutine = StartCoroutine(AnimatePose());
-        }
+        ApplyPoseDriverFromInspector();
     }
 
     void LateUpdate()
     {
-        if (using_custom)
+        if (!no_pose && using_custom)
         {
             DisableAnimatorsForCustomPose();
 
@@ -234,7 +255,21 @@ public class PoseController : MonoBehaviour
             ApplyCustomPose(activeCustomPose);
         }
 
-        UpdateVertexBuffer();
+        if (ShouldBakeVerticesThisFrame())
+            UpdateVertexBuffer();
+    }
+
+    bool ShouldBakeVerticesThisFrame()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        if (currentVertices == null || currentVertices.Length == 0)
+            return true;
+
+        int interval = Mathf.Max(1, questVertexBakeInterval);
+        return Time.frameCount != lastVertexBakeFrame && Time.frameCount % interval == 0;
+#else
+        return true;
+#endif
     }
     void InitializeJoints()
     {
@@ -411,18 +446,12 @@ public class PoseController : MonoBehaviour
         if (!EnsurePoseRuntimeReady())
             return;
 
-        StopCustomPoseCoroutine();
+        no_pose = true;
+        previousNoPose = true;
         using_custom = false;
         previousUsingCustom = false;
-        customPose = null;
-        activeCustomPose = null;
-        isTPose = true;
-        SetAnimatorDrivenMode(false);
-        ApplyTPose();
-        smplx.ResetBodyPose();
-        smplx.UpdatePoseCorrectives();
-        smplx.UpdateJointPositions(false);
-        Debug.Log("Applied clean pose.");
+        ApplyNoPoseRuntime();
+        Debug.Log("Applied no-pose clean state.");
     }
 
     public void ApplyTAPose()
@@ -430,8 +459,14 @@ public class PoseController : MonoBehaviour
         if (!EnsurePoseRuntimeReady())
             return;
 
-        ApplyStableCustomPose(GenerateCustomPose(false));
-        Debug.Log("Applied T-A pose.");
+        no_pose = false;
+        previousNoPose = false;
+        float[] pose = customPose != null && customPose.Length == joints.Length * 3
+            ? customPose
+            : GenerateCustomPose(false);
+
+        ApplyStableCustomPose(pose);
+        Debug.Log("Applied T-A pose from PoseController custom state.");
     }
 
     public void ApplyPose1()
@@ -439,12 +474,31 @@ public class PoseController : MonoBehaviour
         if (!EnsurePoseRuntimeReady())
             return;
 
-        ApplyStableCustomPose(GeneratePose1());
-        Debug.Log("Applied pose 1.");
+        no_pose = false;
+        previousNoPose = false;
+        StopCustomPoseCoroutine();
+        using_custom = false;
+        previousUsingCustom = false;
+        activeCustomPose = null;
+        SetAnimatorDrivenMode(true);
+
+        if (smplxAnimators != null)
+        {
+            for (int i = 0; i < smplxAnimators.Length; ++i)
+            {
+                Animator animator = smplxAnimators[i];
+                if (animator != null && animator.enabled)
+                    animator.Update(0.0f);
+            }
+        }
+
+        Debug.Log("Applied pose 1 from Animator.");
     }
 
     void ApplyStableCustomPose(float[] pose)
     {
+        no_pose = false;
+        previousNoPose = false;
         StopCustomPoseCoroutine();
         using_custom = true;
         previousUsingCustom = true;
@@ -453,6 +507,36 @@ public class PoseController : MonoBehaviour
         SetAnimatorDrivenMode(false);
         DisableAnimatorsForCustomPose();
         ApplyCustomPose(activeCustomPose);
+    }
+
+    void ApplyPoseDriverFromInspector()
+    {
+        StopCustomPoseCoroutine();
+        previousUsingCustom = using_custom;
+        SetAnimatorDrivenMode(!using_custom);
+
+        if (using_custom)
+        {
+            activeCustomPose = GetCustomPose();
+            ApplyCustomPose(activeCustomPose);
+            customPoseCoroutine = StartCoroutine(AnimatePose());
+        }
+        else
+        {
+            activeCustomPose = null;
+        }
+    }
+
+    void ApplyNoPoseRuntime()
+    {
+        StopCustomPoseCoroutine();
+        activeCustomPose = null;
+        isTPose = true;
+        SetAnimatorDrivenMode(false);
+        ApplyTPose();
+        smplx.ResetBodyPose();
+        smplx.UpdatePoseCorrectives();
+        smplx.UpdateJointPositions(false);
     }
 
     float[] GeneratePose1()
@@ -663,15 +747,19 @@ public class PoseController : MonoBehaviour
         smr.BakeMesh(bakedMesh);
 
 
-        // Get the updated vertex positions
-        Vector3[] vertices = bakedMesh.vertices;
-        for (int i = 0; i < vertices.Length; i++)
+        bakedMesh.GetVertices(bakedVertexList);
+        if (currentVertices == null || currentVertices.Length != bakedVertexList.Count)
+            currentVertices = new Vector3[bakedVertexList.Count];
+
+        for (int i = 0; i < bakedVertexList.Count; i++)
         {
             // vertices[i] += smr.gameObject.transform.position; 
             // vertices[i] += debug.position; 
-            vertices[i].x = -vertices[i].x;
+            Vector3 vertex = bakedVertexList[i];
+            vertex.x = -vertex.x;
+            currentVertices[i] = vertex;
         }
-        currentVertices = vertices;
+        lastVertexBakeFrame = Time.frameCount;
             // Specify the file path
         // string filePath = Application.dataPath + "/UnityVertices.txt";
 
@@ -690,7 +778,7 @@ public class PoseController : MonoBehaviour
         // Upload the vertex positions to the GPU buffer
         if (vertexBuffer != null)
         {
-            vertexBuffer.SetData(vertices);
+            vertexBuffer.SetData(currentVertices);
             // Debug.Log("Uploaded new vertex positions to GPU.");
         }
         else

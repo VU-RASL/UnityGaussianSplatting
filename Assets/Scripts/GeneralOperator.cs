@@ -12,9 +12,11 @@ public sealed class GeneralOperator : MonoBehaviour
 {
     [SerializeField] bool buildVR = true;
     [SerializeField] bool buildAR;
+    [SerializeField] bool runPerformanceProtocol = false;
 
     public bool BuildVR => buildVR;
     public bool BuildAR => buildAR;
+    public bool RunPerformanceProtocol => runPerformanceProtocol;
     public GeneralBuildMode Mode => buildAR ? GeneralBuildMode.AR : GeneralBuildMode.VR;
 
     public void SetMode(GeneralBuildMode mode)
@@ -28,6 +30,12 @@ public sealed class GeneralOperator : MonoBehaviour
     {
         var generalOperator = FindObjectOfType<GeneralOperator>(true);
         return generalOperator != null ? generalOperator.Mode : GeneralBuildMode.VR;
+    }
+
+    public static bool GetScenePerformanceProtocolEnabled()
+    {
+        var generalOperator = FindObjectOfType<GeneralOperator>(true);
+        return generalOperator != null && generalOperator.RunPerformanceProtocol;
     }
 
     void Reset()
@@ -60,6 +68,8 @@ public sealed class GeneralOperator : MonoBehaviour
         bool enableAR = Mode == GeneralBuildMode.AR;
         SetComponentsEnabled("UnityEngine.XR.ARFoundation.ARSession, Unity.XR.ARFoundation", enableAR);
         SetComponentsEnabled("UnityEngine.XR.ARFoundation.ARCameraManager, Unity.XR.ARFoundation", enableAR);
+        SetComponentsEnabled("UnityEngine.XR.ARFoundation.ARCameraBackground, Unity.XR.ARFoundation", enableAR);
+        SetComponentsEnabled("UnityEngine.XR.ARFoundation.AROcclusionManager, Unity.XR.ARFoundation", false);
         SetComponentsEnabled("UnityEngine.XR.ARFoundation.ARPlaneManager, Unity.XR.ARFoundation", enableAR);
         SetComponentsEnabled("UnityEngine.XR.ARFoundation.ARRaycastManager, Unity.XR.ARFoundation", enableAR);
         SetComponentsEnabled(typeof(ARGroundPlacement), enableAR);

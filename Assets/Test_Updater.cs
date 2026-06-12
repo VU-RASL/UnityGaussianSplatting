@@ -15,6 +15,7 @@ public class TestShaderWithBuffer : MonoBehaviour
     public PoseController poseController;
     [SerializeField] private GaussianSplatRenderer gaussianRenderer;
     [SerializeField] private bool forceCpuSplatUpdate;
+    [SerializeField, Range(1, 4)] private int questCpuUpdateInterval = 2;
     
     // GPU Buffers
     private ComputeBuffer gaussianToFaceBuffer;
@@ -38,6 +39,7 @@ public class TestShaderWithBuffer : MonoBehaviour
     private uint[] cpuOtherData;
     private int cpuOtherStrideWords;
     private GraphicsBuffer questCpuPositionBuffer;
+    private int lastQuestCpuUpdateFrame = -1;
 
     bool UseQuestCpuSplatUpdate
     {
@@ -293,8 +295,18 @@ void SaveHahaScalingToTxt()
 
     void LateUpdate()
     {
-        if (UseQuestCpuSplatUpdate)
+        if (UseQuestCpuSplatUpdate && ShouldRunQuestCpuUpdateThisFrame())
             ExecuteQuestCpuUpdate();
+    }
+
+    bool ShouldRunQuestCpuUpdateThisFrame()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        int interval = Mathf.Max(1, questCpuUpdateInterval);
+        return lastQuestCpuUpdateFrame < 0 || Time.frameCount % interval == 0;
+#else
+        return true;
+#endif
     }
     void ExecuteShader()
     {
@@ -601,6 +613,7 @@ void DebugFaceBuffer()
 
         targetPositionBuffer.SetData(cpuPositionData);
         targetOtherBuffer.SetData(cpuOtherData);
+        lastQuestCpuUpdateFrame = Time.frameCount;
     }
 
     static float3 ToFloat3(Vector3 v)

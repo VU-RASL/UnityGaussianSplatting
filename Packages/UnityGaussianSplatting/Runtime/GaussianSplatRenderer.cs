@@ -134,9 +134,14 @@ namespace GaussianSplatting.Runtime
 
                 // sort
                 var matrix = gs.transform.localToWorldMatrix;
+                int sortInterval = GetEffectiveSortInterval(cam, gs);
+                bool sortThisFrame = ShouldSortThisFrame(cam, gs, sortInterval);
                 if (useVertexViewDataFallback)
-                    gs.SortPointsCpu(cam, matrix);
-                else if (gs.m_FrameCounter % gs.m_SortNthFrame == 0)
+                {
+                    if (sortThisFrame)
+                        gs.SortPointsCpu(cam, matrix);
+                }
+                else if (sortThisFrame)
                     gs.SortPoints(cmb, cam, matrix);
                 ++gs.m_FrameCounter;
 
@@ -376,6 +381,26 @@ namespace GaussianSplatting.Runtime
 #else
             return false;
 #endif
+        }
+
+        static int GetEffectiveSortInterval(Camera cam, GaussianSplatRenderer gs)
+        {
+            int interval = Mathf.Max(1, gs != null ? gs.m_SortNthFrame : 1);
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (cam != null && cam.cameraType == CameraType.Game)
+                interval = Mathf.Max(interval, 2);
+#endif
+            return interval;
+        }
+
+        static bool ShouldSortThisFrame(Camera cam, GaussianSplatRenderer gs, int interval)
+        {
+            interval = Mathf.Max(1, interval);
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (cam != null && cam.cameraType == CameraType.Game)
+                return Time.frameCount % interval == interval - 1;
+#endif
+            return gs != null && gs.m_FrameCounter % interval == 0;
         }
 
         static CameraEvent GetColorCommandBufferEvent(Camera cam)
