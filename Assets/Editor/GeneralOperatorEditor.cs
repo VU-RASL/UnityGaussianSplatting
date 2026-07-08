@@ -16,12 +16,14 @@ public sealed class GeneralOperatorEditor : Editor
 {
     SerializedProperty buildVR;
     SerializedProperty buildAR;
+    SerializedProperty showHeadsetFps;
     SerializedProperty runPerformanceProtocol;
 
     void OnEnable()
     {
         buildVR = serializedObject.FindProperty("buildVR");
         buildAR = serializedObject.FindProperty("buildAR");
+        showHeadsetFps = serializedObject.FindProperty("showHeadsetFps");
         runPerformanceProtocol = serializedObject.FindProperty("runPerformanceProtocol");
     }
 
@@ -35,6 +37,10 @@ public sealed class GeneralOperatorEditor : Editor
         EditorGUILayout.LabelField("Build Mode", EditorStyles.boldLabel);
         bool newVR = EditorGUILayout.ToggleLeft("VR", oldVR);
         bool newAR = EditorGUILayout.ToggleLeft("AR", oldAR);
+
+        EditorGUILayout.Space();
+        EditorGUILayout.LabelField("Headset Debug", EditorStyles.boldLabel);
+        EditorGUILayout.PropertyField(showHeadsetFps, new GUIContent("Show FPS count"));
 
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("Performance Protocol", EditorStyles.boldLabel);

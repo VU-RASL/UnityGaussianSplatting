@@ -12,6 +12,7 @@ public class PoseController : MonoBehaviour
 
     [SerializeField] public SMPLX smplx; // Reference to the SMPL-X model
     public bool no_pose = false;
+    public bool a_pose = false;
     public bool using_custom = false;
     public bool visualable_mesh = true;
     public float poseSwitchTime = 3f;   // Time in seconds to switch poses
@@ -43,6 +44,7 @@ public class PoseController : MonoBehaviour
     private float initialAnimatorSpeed = 1.0f;
     private bool previousUsingCustom;
     private bool previousNoPose;
+    private bool previousAPose;
     private bool previousVisualableMesh;
     private Mesh bakedMesh;
     private Vector3[] currentVertices;
@@ -70,6 +72,7 @@ public class PoseController : MonoBehaviour
     ComputeBuffer haha_rotationBuffer;
 
     public bool NoPose => no_pose;
+    public bool APose => a_pose;
 
     void Reset()
     {
@@ -163,15 +166,24 @@ public class PoseController : MonoBehaviour
         InitializeVertexBuffer();
 
         previousNoPose = no_pose;
+        previousAPose = a_pose;
         previousUsingCustom = using_custom;
         previousVisualableMesh = visualable_mesh;
         ApplyMeshVisibility();
 
         if (no_pose)
         {
+            a_pose = false;
+            previousAPose = false;
             using_custom = false;
             previousUsingCustom = false;
             ApplyNoPoseRuntime();
+        }
+        else if (a_pose)
+        {
+            using_custom = false;
+            previousUsingCustom = false;
+            ApplyAPoseRuntime();
         }
         else
         {
@@ -217,6 +229,8 @@ public class PoseController : MonoBehaviour
             previousNoPose = no_pose;
             if (no_pose)
             {
+                a_pose = false;
+                previousAPose = false;
                 using_custom = false;
                 previousUsingCustom = false;
                 ApplyNoPoseRuntime();
@@ -228,8 +242,37 @@ public class PoseController : MonoBehaviour
             return;
         }
 
+        if (a_pose != previousAPose)
+        {
+            previousAPose = a_pose;
+            if (a_pose)
+            {
+                no_pose = false;
+                previousNoPose = false;
+                using_custom = false;
+                previousUsingCustom = false;
+                ApplyAPoseRuntime();
+            }
+            else
+            {
+                activeCustomPose = null;
+                ApplyPoseDriverFromInspector();
+            }
+            return;
+        }
+
         if (no_pose)
         {
+            return;
+        }
+
+        if (a_pose)
+        {
+            if (using_custom)
+            {
+                using_custom = false;
+                previousUsingCustom = false;
+            }
             return;
         }
 
@@ -243,7 +286,18 @@ public class PoseController : MonoBehaviour
 
     void LateUpdate()
     {
-        if (!no_pose && using_custom)
+        if (!no_pose && a_pose)
+        {
+            DisableAnimatorsForCustomPose();
+
+            if (activeCustomPose == null)
+            {
+                activeCustomPose = GenerateAPose();
+            }
+
+            ApplyCustomPose(activeCustomPose);
+        }
+        else if (!no_pose && using_custom)
         {
             DisableAnimatorsForCustomPose();
 
@@ -414,6 +468,18 @@ public class PoseController : MonoBehaviour
         return pose;
     }
 
+    float[] GenerateAPose()
+    {
+        float[] pose = new float[joints.Length * 3];
+        SetCustomJointEuler(pose, "left_collar", new Vector3(0.0f, 0.0f, 12.0f));
+        SetCustomJointEuler(pose, "left_shoulder", new Vector3(0.0f, 0.0f, 55.0f));
+        SetCustomJointEuler(pose, "left_elbow", new Vector3(0.0f, 0.0f, 4.0f));
+        SetCustomJointEuler(pose, "right_collar", new Vector3(0.0f, 0.0f, -12.0f));
+        SetCustomJointEuler(pose, "right_shoulder", new Vector3(0.0f, 0.0f, -55.0f));
+        SetCustomJointEuler(pose, "right_elbow", new Vector3(0.0f, 0.0f, -4.0f));
+        return pose;
+    }
+
     void SetCustomJointEuler(float[] pose, string jointName, Vector3 eulerAngles)
     {
         for (int i = 0; i < joints.Length; i++)
@@ -448,6 +514,8 @@ public class PoseController : MonoBehaviour
 
         no_pose = true;
         previousNoPose = true;
+        a_pose = false;
+        previousAPose = false;
         using_custom = false;
         previousUsingCustom = false;
         ApplyNoPoseRuntime();
@@ -461,12 +529,29 @@ public class PoseController : MonoBehaviour
 
         no_pose = false;
         previousNoPose = false;
+        a_pose = false;
+        previousAPose = false;
         float[] pose = customPose != null && customPose.Length == joints.Length * 3
             ? customPose
             : GenerateCustomPose(false);
 
         ApplyStableCustomPose(pose);
         Debug.Log("Applied T-A pose from PoseController custom state.");
+    }
+
+    public void ApplyAPose()
+    {
+        if (!EnsurePoseRuntimeReady())
+            return;
+
+        no_pose = false;
+        previousNoPose = false;
+        a_pose = true;
+        previousAPose = true;
+        using_custom = false;
+        previousUsingCustom = false;
+        ApplyAPoseRuntime();
+        Debug.Log("Applied A-pose from PoseController.");
     }
 
     public void ApplyPose1()
@@ -476,6 +561,8 @@ public class PoseController : MonoBehaviour
 
         no_pose = false;
         previousNoPose = false;
+        a_pose = false;
+        previousAPose = false;
         StopCustomPoseCoroutine();
         using_custom = false;
         previousUsingCustom = false;
@@ -499,11 +586,22 @@ public class PoseController : MonoBehaviour
     {
         no_pose = false;
         previousNoPose = false;
+        a_pose = false;
+        previousAPose = false;
         StopCustomPoseCoroutine();
         using_custom = true;
         previousUsingCustom = true;
         customPose = pose;
         activeCustomPose = pose;
+        SetAnimatorDrivenMode(false);
+        DisableAnimatorsForCustomPose();
+        ApplyCustomPose(activeCustomPose);
+    }
+
+    void ApplyAPoseRuntime()
+    {
+        StopCustomPoseCoroutine();
+        activeCustomPose = GenerateAPose();
         SetAnimatorDrivenMode(false);
         DisableAnimatorsForCustomPose();
         ApplyCustomPose(activeCustomPose);

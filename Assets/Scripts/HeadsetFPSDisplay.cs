@@ -33,6 +33,9 @@ public sealed class HeadsetFPSDisplay : MonoBehaviour
     static void CreateForQuest()
     {
 #if UNITY_ANDROID && !UNITY_EDITOR
+        if (!GeneralOperator.GetSceneHeadsetFpsEnabled())
+            return;
+
         if (FindObjectOfType<HeadsetFPSDisplay>() != null)
             return;
 

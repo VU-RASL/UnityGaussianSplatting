@@ -270,6 +270,9 @@ public sealed class PerformanceProtocolRecorder : MonoBehaviour
         if (poseController.NoPose)
             return "No Pose";
 
+        if (poseController.APose)
+            return "A Pose";
+
         if (poseController.using_custom)
             return "T-A pose";
 

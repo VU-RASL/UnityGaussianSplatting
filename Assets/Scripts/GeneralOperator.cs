@@ -12,10 +12,12 @@ public sealed class GeneralOperator : MonoBehaviour
 {
     [SerializeField] bool buildVR = true;
     [SerializeField] bool buildAR;
+    [SerializeField] bool showHeadsetFps = false;
     [SerializeField] bool runPerformanceProtocol = false;
 
     public bool BuildVR => buildVR;
     public bool BuildAR => buildAR;
+    public bool ShowHeadsetFps => showHeadsetFps;
     public bool RunPerformanceProtocol => runPerformanceProtocol;
     public GeneralBuildMode Mode => buildAR ? GeneralBuildMode.AR : GeneralBuildMode.VR;
 
@@ -36,6 +38,12 @@ public sealed class GeneralOperator : MonoBehaviour
     {
         var generalOperator = FindObjectOfType<GeneralOperator>(true);
         return generalOperator != null && generalOperator.RunPerformanceProtocol;
+    }
+
+    public static bool GetSceneHeadsetFpsEnabled()
+    {
+        var generalOperator = FindObjectOfType<GeneralOperator>(true);
+        return generalOperator != null && generalOperator.ShowHeadsetFps;
     }
 
     void Reset()
